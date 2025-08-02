@@ -18,12 +18,13 @@ class TransactionExporter
       exit 1
     end
 
-    Current.user = @user
-    Current.family = @user.family
+    # Set up session for Current context
+    session = Session.create!(user: @user, user_agent: "TransactionExporter", ip_address: "127.0.0.1")
+    Current.session = session
   end
 
   def export
-    filename = @options[:filename] || "transactions_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = @options[:filename] || Rails.root.join("tmp", "transactions_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
     
     transactions = build_query
     count = export_to_csv(transactions, filename)
@@ -33,7 +34,7 @@ class TransactionExporter
   end
 
   def export_by_account
-    filename_base = @options[:filename] || "transactions"
+    filename_base = @options[:filename] || Rails.root.join("tmp", "transactions").to_s
     timestamp = Date.current.strftime('%Y%m%d_%H%M%S')
     
     Current.family.accounts.each do |account|
@@ -48,7 +49,7 @@ class TransactionExporter
   end
 
   def export_summary
-    filename = @options[:filename] || "transaction_summary_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = @options[:filename] || Rails.root.join("tmp", "transaction_summary_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
     
     # Group by category
     summary_data = Current.family.transactions

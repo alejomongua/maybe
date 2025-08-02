@@ -3,7 +3,7 @@ namespace :transactions do
   task :export, [:email, :filename, :start_date, :end_date, :account_id] => :environment do |t, args|
     # Default values
     args.with_defaults(
-      filename: "transactions_export_#{Date.current.strftime('%Y%m%d')}.csv"
+      filename: Rails.root.join("tmp", "transactions_export_#{Date.current.strftime('%Y%m%d')}.csv").to_s
     )
 
     # Find user by email
@@ -14,8 +14,8 @@ namespace :transactions do
     end
 
     # Set Current context
-    Current.user = user
-    Current.family = user.family
+    session = Session.create!(user: user, user_agent: "RakeTask", ip_address: "127.0.0.1")
+    Current.session = session
 
     # Build query
     transactions = Current.family.transactions
@@ -86,7 +86,7 @@ namespace :transactions do
   desc "Export transactions with account balances"
   task :export_with_balances, [:email, :filename] => :environment do |t, args|
     args.with_defaults(
-      filename: "transactions_with_balances_#{Date.current.strftime('%Y%m%d')}.csv"
+      filename: Rails.root.join("tmp", "transactions_with_balances_#{Date.current.strftime('%Y%m%d')}.csv").to_s
     )
 
     user = User.find_by(email: args[:email])
@@ -95,8 +95,8 @@ namespace :transactions do
       exit 1
     end
 
-    Current.user = user
-    Current.family = user.family
+    session = Session.create!(user: user, user_agent: "RakeTask", ip_address: "127.0.0.1")
+    Current.session = session
 
     CSV.open(args[:filename], "wb") do |csv|
       csv << [
@@ -150,8 +150,8 @@ namespace :transactions do
       exit 1
     end
 
-    Current.user = user
-    Current.family = user.family
+    session = Session.create!(user: user, user_agent: "RakeTask", ip_address: "127.0.0.1")
+    Current.session = session
 
     puts "\nAvailable accounts for #{user.email}:"
     puts "-" * 60
