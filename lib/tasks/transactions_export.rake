@@ -3,7 +3,7 @@ namespace :transactions do
   task :export, [:email, :filename, :start_date, :end_date, :account_id] => :environment do |t, args|
     # Default values
     args.with_defaults(
-      filename: Rails.root.join("tmp", "transactions_export_#{Date.current.strftime('%Y%m%d')}.csv").to_s
+      filename: Rails.root.join("exports", "transactions_export_#{Date.current.strftime('%Y%m%d')}.csv").to_s
     )
 
     # Find user by email
@@ -86,7 +86,7 @@ namespace :transactions do
   desc "Export transactions with account balances"
   task :export_with_balances, [:email, :filename] => :environment do |t, args|
     args.with_defaults(
-      filename: Rails.root.join("tmp", "transactions_with_balances_#{Date.current.strftime('%Y%m%d')}.csv").to_s
+      filename: Rails.root.join("exports", "transactions_with_balances_#{Date.current.strftime('%Y%m%d')}.csv").to_s
     )
 
     user = User.find_by(email: args[:email])

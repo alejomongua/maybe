@@ -24,7 +24,7 @@ class TransactionExporter
   end
 
   def export
-    filename = @options[:filename] || Rails.root.join("tmp", "transactions_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
+    filename = @options[:filename] || Rails.root.join("exports", "transactions_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
     
     transactions = build_query
     count = export_to_csv(transactions, filename)
@@ -34,7 +34,7 @@ class TransactionExporter
   end
 
   def export_by_account
-    filename_base = @options[:filename] || Rails.root.join("tmp", "transactions").to_s
+    filename_base = @options[:filename] || Rails.root.join("exports", "transactions").to_s
     timestamp = Date.current.strftime('%Y%m%d_%H%M%S')
     
     Current.family.accounts.each do |account|
@@ -49,7 +49,7 @@ class TransactionExporter
   end
 
   def export_summary
-    filename = @options[:filename] || Rails.root.join("tmp", "transaction_summary_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
+    filename = @options[:filename] || Rails.root.join("exports", "transaction_summary_#{Date.current.strftime('%Y%m%d_%H%M%S')}.csv").to_s
     
     # Group by category
     summary_data = Current.family.transactions
