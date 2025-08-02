@@ -47,4 +47,23 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Test Release"
     # Should not crash even with nil values
   end
+
+  test "cashflow" do
+    get cashflow_path
+    assert_response :ok
+    assert_select "h1", text: "Cashflow"
+  end
+
+  test "cashflow with specific month and year" do
+    get cashflow_path, params: { month: 6, year: 2024 }
+    assert_response :ok
+    assert_select "h2", text: /June 2024 Cashflow/
+  end
+
+  test "cashflow with invalid period defaults to current month" do
+    get cashflow_path, params: { month: "invalid", year: "invalid" }
+    assert_response :ok
+    # Should still render without errors
+    assert_select "h1", text: "Cashflow"
+  end
 end

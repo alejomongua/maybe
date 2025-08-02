@@ -1,0 +1,100 @@
+<% content_for :page_header do %>
+  <div class="space-y-1 mb-6">
+    <h1 class="text-xl lg:text-3xl font-medium text-primary">Cashflow</h1>
+    <p class="text-sm lg:text-base text-secondary">View your income and expenses for any month</p>
+  </div>
+<% end %>
+
+<div class="w-full space-y-6 pb-24">
+  <%= turbo_frame_tag "cashflow_view" do %>
+    <section class="bg-container py-4 rounded-xl shadow-border-xs">
+      <div class="px-4 mb-4">
+        <%= form_with url: cashflow_path, method: :get, data: { controller: "auto-submit-form", turbo_frame: "cashflow_view" } do |form| %>
+          <div class="flex gap-4 items-center">
+            <div>
+              <label class="block text-sm font-medium text-secondary mb-1">Month</label>
+              <%= form.select :month,
+                        @months,
+                        { selected: @selected_month },
+                        data: { "auto-submit-form-target": "auto" },
+                        class: "bg-container border border-secondary font-medium rounded-lg px-3 py-2 text-sm cursor-pointer text-primary focus:outline-hidden focus:ring-0" %>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-secondary mb-1">Year</label>
+              <%= form.select :year,
+                        @available_years,
+                        { selected: @selected_year },
+                        data: { "auto-submit-form-target": "auto" },
+                        class: "bg-container border border-secondary font-medium rounded-lg px-3 py-2 text-sm cursor-pointer text-primary focus:outline-hidden focus:ring-0" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="px-4">
+        <h2 class="text-lg font-medium mb-2">
+          <%= @selected_period.start_date.strftime("%B %Y") %> Cashflow
+        </h2>
+        <p class="text-sm text-secondary mb-4">
+          <%= @selected_period.start_date.strftime("%b %d") %> - <%= @selected_period.end_date.strftime("%b %d, %Y") %>
+        </p>
+      </div>
+
+      <% if @cashflow_sankey_data[:links].present? %>
+        <div class="w-full h-96">
+          <div
+            data-controller="sankey-chart"
+            data-sankey-chart-data-value="<%= @cashflow_sankey_data.to_json %>"
+            data-sankey-chart-currency-symbol-value="<%= @cashflow_sankey_data[:currency_symbol] %>"
+            class="w-full h-full"></div>
+        </div>
+      <% else %>
+        <div class="h-[300px] lg:h-[340px] py-4 flex flex-col items-center justify-center">
+          <div class="space-y-3 text-center flex flex-col items-center">
+            <%= render DS::FilledIcon.new(
+              variant: :container,
+              icon: "activity"
+            ) %>
+
+            <p class="text-sm font-medium text-primary">No cash flow data for <%= @selected_period.start_date.strftime("%B %Y") %></p>
+            <p class="text-secondary text-sm">Add transactions to display cash flow data or select a different period</p>
+            <%= render DS::Link.new(
+              text: "Add transaction",
+              icon: "plus",
+              href: new_transaction_path,
+              frame: :modal
+            ) %>
+          </div>
+        </div>
+      <% end %>
+    </section>
+
+    <% if @cashflow_sankey_data[:links].present? %>
+      <section class="bg-container py-4 px-4 rounded-xl shadow-border-xs">
+        <h3 class="text-lg font-medium mb-4">Summary</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="space-y-1">
+            <p class="text-sm text-secondary">Total Income</p>
+            <p class="text-xl font-medium text-success">
+              <%= @cashflow_sankey_data[:currency_symbol] %><%= number_with_delimiter(@cashflow_sankey_data[:nodes].select { |n| n[:name] != "Cash Flow" && n[:name] != "Surplus" }.select { |n| @cashflow_sankey_data[:links].any? { |l| l[:source] == @cashflow_sankey_data[:nodes].index(n) && l[:target] == @cashflow_sankey_data[:nodes].index { |node| node[:name] == "Cash Flow" } } }.sum { |n| n[:value] }) %>
+            </p>
+          </div>
+          <div class="space-y-1">
+            <p class="text-sm text-secondary">Total Expenses</p>
+            <p class="text-xl font-medium text-danger">
+              <%= @cashflow_sankey_data[:currency_symbol] %><%= number_with_delimiter(@cashflow_sankey_data[:nodes].select { |n| n[:name] != "Cash Flow" && n[:name] != "Surplus" }.select { |n| @cashflow_sankey_data[:links].any? { |l| l[:target] == @cashflow_sankey_data[:nodes].index(n) && l[:source] == @cashflow_sankey_data[:nodes].index { |node| node[:name] == "Cash Flow" } } }.sum { |n| n[:value] }) %>
+            </p>
+          </div>
+          <div class="space-y-1">
+            <p class="text-sm text-secondary">Net Cashflow</p>
+            <% surplus_node = @cashflow_sankey_data[:nodes].find { |n| n[:name] == "Surplus" } %>
+            <% net_cashflow = surplus_node ? surplus_node[:value] : 0 %>
+            <p class="text-xl font-medium <%= net_cashflow >= 0 ? 'text-success' : 'text-danger' %>">
+              <%= @cashflow_sankey_data[:currency_symbol] %><%= number_with_delimiter(net_cashflow.abs) %>
+            </p>
+          </div>
+        </div>
+      </section>
+    <% end %>
+  <% end %>
+</div>

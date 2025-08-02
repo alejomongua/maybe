@@ -48,6 +48,32 @@ class PagesController < ApplicationController
     render layout: "settings"
   end
 
+  def cashflow
+    # Handle year and month parameters
+    year = params[:year].present? ? params[:year].to_i : Date.current.year
+    month = params[:month].present? ? params[:month].to_i : Date.current.month
+
+    # Create custom period for the selected month
+    start_date = Date.new(year, month, 1)
+    end_date = start_date.end_of_month
+    @selected_period = Period.custom(start_date: start_date, end_date: end_date)
+
+    # Get income and expense totals for the selected period
+    family_currency = Current.family.currency
+    income_totals = Current.family.income_statement.income_totals(period: @selected_period)
+    expense_totals = Current.family.income_statement.expense_totals(period: @selected_period)
+
+    @cashflow_sankey_data = build_cashflow_sankey_data(income_totals, expense_totals, family_currency)
+
+    # Prepare data for month/year selectors
+    @available_years = (2020..Date.current.year).to_a.reverse
+    @months = Date::MONTHNAMES.compact.each_with_index.map { |name, idx| [name, idx + 1] }
+    @selected_year = year
+    @selected_month = month
+
+    @breadcrumbs = [ [ "Home", root_path ], [ "Cashflow", nil ] ]
+  end
+
   def redis_configuration_error
     render layout: "blank"
   end

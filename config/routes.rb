@@ -32,6 +32,7 @@ Rails.application.routes.draw do
 
   get "changelog", to: "pages#changelog"
   get "feedback", to: "pages#feedback"
+  get "cashflow", to: "pages#cashflow"
 
   resource :current_session, only: %i[update]
 
