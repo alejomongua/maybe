@@ -7,10 +7,18 @@ class Provider::Openai < Provider
   MODELS = %w[gpt-4.1]
 
   def initialize(access_token)
-    @client = ::OpenAI::Client.new(access_token: access_token)
+    options = { access_token: access_token }
+
+    # Check if there is an override base URL (for using OpenAI-compatible APIs like Ollama)
+    base_url = ENV["AI_BASE_URL"]
+    options[:base_url] = base_url if base_url.present?
+
+    @client = ::OpenAI::Client.new(options)
   end
 
   def supports_model?(model)
+    return true if ENV["AI_BASE_URL"].present?
+
     MODELS.include?(model)
   end
 

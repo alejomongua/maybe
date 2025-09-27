@@ -6,14 +6,17 @@ class ChatsController < ApplicationController
   def index
     @chat = nil # override application_controller default behavior of setting @chat to last viewed chat
     @chats = Current.user.chats.order(created_at: :desc)
+    @ai_model = ENV.fetch("AI_MODEL", "gpt-4.1")
   end
 
   def show
     set_last_viewed_chat(@chat)
+    @ai_model = ENV.fetch("AI_MODEL", "gpt-4.1")
   end
 
   def new
     @chat = Current.user.chats.new(title: "New chat #{Time.current.strftime("%Y-%m-%d %H:%M")}")
+    @ai_model = ENV.fetch("AI_MODEL", "gpt-4.1")
   end
 
   def create
