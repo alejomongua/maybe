@@ -75,57 +75,55 @@ class Provider::Openai < Provider
         function_results: function_results
       )
 
-      messages = chat_config.build_input(prompt)
-
-      parameters = {
-        model: model,
-        messages: messages
-      }
-
-      # Add optional parameters if present
-      parameters[:tools] = chat_config.tools if chat_config.tools.any?
-      parameters[:tool_choice] = "auto" if chat_config.tools.any?
-      parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
-
-      # Handle streaming differently for Chat Completions API
+      # For streaming, we need to handle it differently - use non-streaming for now
+      # to ensure the job completes properly
       if streamer.present?
-        collected_content = []
+        # Use non-streaming mode for Ollama compatibility
+        messages = chat_config.build_input(prompt)
+
+        parameters = {
+          model: model,
+          messages: messages
+        }
+
+        # Add optional parameters if present
+        parameters[:tools] = chat_config.tools if chat_config.tools.any?
+        parameters[:tool_choice] = "auto" if chat_config.tools.any?
+        parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
+
+        raw_response = client.chat(parameters: parameters)
+        parsed = ChatParser.new(raw_response).parsed
         
-        stream_proxy = proc do |chunk, _bytesize|
-          # For Chat Completions API streaming, we get content chunks
-          content_delta = chunk.dig("choices", 0, "delta", "content")
-          if content_delta.present?
-            collected_content << content_delta
-            streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "output_text", data: content_delta))
-          end
-          
-          # Check if this is the final chunk
-          if chunk.dig("choices", 0, "finish_reason").present?
-            # Build the final response from collected content
-            full_content = collected_content.join("")
-            response_data = {
-              "id" => "stream-#{Time.now.to_i}",
-              "model" => model,
-              "choices" => [
-                {
-                  "message" => {
-                    "role" => "assistant",
-                    "content" => full_content
-                  }
-                }
-              ]
-            }
-            parsed_response = ChatParser.new(response_data).parsed
-            streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "response", data: parsed_response))
-          end
+        # Simulate streaming by sending the complete response as chunks
+        if parsed.messages.any?
+          message_text = parsed.messages.first.output_text
+          # Send content chunks
+          streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "output_text", data: message_text))
+          # Send final response
+          streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "response", data: parsed))
         end
         
-        parameters[:stream] = stream_proxy
-        client.chat(parameters: parameters)
-        
-        # For streaming, we return nil since the response is handled through the streamer
-        nil
+        log_langfuse_generation(
+          name: "chat_response",
+          model: model,
+          input: messages,
+          output: parsed.messages.map(&:output_text).join("\n"),
+          usage: raw_response["usage"]
+        )
+        parsed
       else
+        messages = chat_config.build_input(prompt)
+
+        parameters = {
+          model: model,
+          messages: messages
+        }
+
+        # Add optional parameters if present
+        parameters[:tools] = chat_config.tools if chat_config.tools.any?
+        parameters[:tool_choice] = "auto" if chat_config.tools.any?
+        parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
+
         raw_response = client.chat(parameters: parameters)
         parsed = ChatParser.new(raw_response).parsed
         log_langfuse_generation(
