@@ -42,7 +42,8 @@ class Provider::Openai::ChatParser
       return [] unless message
 
       # For Chat Completions API, we get a single message with content and optional tool_calls
-      message_content = message.dig("content") || ""
+      # Ollama may use "reasoning_content" instead of "content" for some models
+      message_content = message.dig("content") || message.dig("reasoning_content") || ""
       
       [ChatMessage.new(
         id: response_id,
