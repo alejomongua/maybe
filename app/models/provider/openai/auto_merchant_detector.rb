@@ -9,21 +9,14 @@ class Provider::Openai::AutoMerchantDetector
   end
 
   def auto_detect_merchants
-    response = client.responses.create(parameters: {
+    response = client.chat(parameters: {
       model: model.presence || DEFAULT_MODEL,
-      input: [ { role: "developer", content: developer_message } ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "auto_detect_personal_finance_merchants",
-          strict: true,
-          schema: json_schema
-        }
-      },
-      instructions: instructions
+      messages: [ { role: "user", content: developer_message } ],
+      response_format: { type: "json_object" },
+      max_tokens: 4096
     })
 
-    Rails.logger.info("Tokens used to auto-detect merchants: #{response.dig("usage").dig("total_tokens")}")
+    Rails.logger.info("Tokens used to auto-detect merchants: #{response.dig("usage", "total_tokens")}")
 
     build_response(extract_categorizations(response))
   end
@@ -91,7 +84,10 @@ class Provider::Openai::AutoMerchantDetector
     end
 
     def extract_categorizations(response)
-      response_json = JSON.parse(response.dig("output")[0].dig("content")[0].dig("text"))
+      content = response.dig("choices", 0, "message", "content")
+      return [] unless content
+      
+      response_json = JSON.parse(content)
       response_json.dig("merchants")
     end
 

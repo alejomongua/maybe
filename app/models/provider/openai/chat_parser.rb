@@ -30,29 +30,36 @@ class Provider::Openai::ChatParser
     end
 
     def messages
-      message_items = object.dig("output").filter { |item| item.dig("type") == "message" }
+      choice = object.dig("choices", 0)
+      return [] unless choice
 
-      message_items.map do |message_item|
-        ChatMessage.new(
-          id: message_item.dig("id"),
-          output_text: message_item.dig("content").map do |content|
-            text = content.dig("text")
-            refusal = content.dig("refusal")
-            text || refusal
-          end.flatten.join("\n")
-        )
-      end
+      message = choice.dig("message")
+      return [] unless message
+
+      # For Chat Completions API, we get a single message with content and optional tool_calls
+      message_content = message.dig("content") || ""
+      
+      [ChatMessage.new(
+        id: response_id,
+        output_text: message_content
+      )]
     end
 
     def function_requests
-      function_items = object.dig("output").filter { |item| item.dig("type") == "function_call" }
+      choice = object.dig("choices", 0)
+      return [] unless choice
 
-      function_items.map do |function_item|
+      message = choice.dig("message")
+      return [] unless message
+
+      tool_calls = message.dig("tool_calls") || []
+      
+      tool_calls.map do |tool_call|
         ChatFunctionRequest.new(
-          id: function_item.dig("id"),
-          call_id: function_item.dig("call_id"),
-          function_name: function_item.dig("name"),
-          function_args: function_item.dig("arguments")
+          id: tool_call.dig("id"),
+          call_id: tool_call.dig("id"), # Use the same ID for call_id in Chat Completions API
+          function_name: tool_call.dig("function", "name"),
+          function_args: tool_call.dig("function", "arguments")
         )
       end
     end

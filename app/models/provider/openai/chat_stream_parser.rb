@@ -6,14 +6,29 @@ class Provider::Openai::ChatStreamParser
   end
 
   def parsed
-    type = object.dig("type")
+    # For Chat Completions API streaming, chunks have a different structure
+    choices = object.dig("choices")
+    return nil unless choices && choices.any?
 
-    case type
-    when "response.output_text.delta", "response.refusal.delta"
-      Chunk.new(type: "output_text", data: object.dig("delta"))
-    when "response.completed"
-      raw_response = object.dig("response")
-      Chunk.new(type: "response", data: parse_response(raw_response))
+    choice = choices.first
+    delta = choice.dig("delta")
+    return nil unless delta
+
+    # Check if this is a content delta
+    if delta.key?("content")
+      Chunk.new(type: "output_text", data: delta.dig("content"))
+    # Check if this is a tool call delta (function call)
+    elsif delta.key?("tool_calls")
+      # For tool calls, we need to handle the completed response
+      # In streaming mode, tool calls are sent as a completed response
+      if choice.dig("finish_reason") == "tool_calls"
+        Chunk.new(type: "response", data: parse_response(object))
+      end
+    # Check if this is the final chunk with usage data
+    elsif object.key?("usage")
+      # This is the final chunk with usage information
+      # We can ignore it or use it for logging
+      nil
     end
   end
 

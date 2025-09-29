@@ -11,7 +11,9 @@ class Provider::Openai < Provider
 
     # Check if there is an override base URL (for using OpenAI-compatible APIs like Ollama)
     base_url = ENV["AI_BASE_URL"]
-    options[:base_url] = base_url if base_url.present?
+    options[:uri_base] = base_url if base_url.present?
+
+    Rails.logger.debug("Initializing OpenAI client with options: #{options.except(:access_token)}")
 
     @client = ::OpenAI::Client.new(options)
   end
@@ -89,16 +91,20 @@ class Provider::Openai < Provider
         nil
       end
 
-      input_payload = chat_config.build_input(prompt)
+      messages = chat_config.build_input(prompt)
 
-      raw_response = client.responses.create(parameters: {
+      parameters = {
         model: model,
-        input: input_payload,
-        instructions: instructions,
-        tools: chat_config.tools,
-        previous_response_id: previous_response_id,
+        messages: messages,
         stream: stream_proxy
-      })
+      }
+
+      # Add optional parameters if present
+      parameters[:tools] = chat_config.tools if chat_config.tools.any?
+      parameters[:tool_choice] = "auto" if chat_config.tools.any?
+      parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
+
+      raw_response = client.chat(parameters: parameters)
 
       # If streaming, Ruby OpenAI does not return anything, so to normalize this method's API, we search
       # for the "response chunk" in the stream and return it (it is already parsed)
@@ -108,7 +114,7 @@ class Provider::Openai < Provider
         log_langfuse_generation(
           name: "chat_response",
           model: model,
-          input: input_payload,
+          input: messages,
           output: response.messages.map(&:output_text).join("\n")
         )
         response
@@ -117,7 +123,7 @@ class Provider::Openai < Provider
         log_langfuse_generation(
           name: "chat_response",
           model: model,
-          input: input_payload,
+          input: messages,
           output: parsed.messages.map(&:output_text).join("\n"),
           usage: raw_response["usage"]
         )
