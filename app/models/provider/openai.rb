@@ -75,11 +75,14 @@ class Provider::Openai < Provider
         function_results: function_results
       )
 
+      Rails.logger.debug("ChatResponse called with prompt: #{prompt.inspect}, model: #{model}, functions: #{functions.size}, function_results: #{function_results.size}")
+
       # For streaming, we need to handle it differently - use non-streaming for now
       # to ensure the job completes properly
       if streamer.present?
         # Use non-streaming mode for Ollama compatibility
         messages = chat_config.build_input(prompt)
+        Rails.logger.debug("Streaming mode - Built messages: #{messages.inspect}")
 
         parameters = {
           model: model,
@@ -91,16 +94,23 @@ class Provider::Openai < Provider
         parameters[:tool_choice] = "auto" if chat_config.tools.any?
         parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
 
+        Rails.logger.debug("Sending chat request with parameters: #{parameters.except(:messages).inspect}")
         raw_response = client.chat(parameters: parameters)
+        Rails.logger.debug("Raw response received: #{raw_response.inspect}")
+
         parsed = ChatParser.new(raw_response).parsed
+        Rails.logger.debug("Parsed response: #{parsed.inspect}")
         
         # Simulate streaming by sending the complete response as chunks
         if parsed.messages.any?
           message_text = parsed.messages.first.output_text
+          Rails.logger.debug("Sending streaming chunks - message text: #{message_text.inspect}")
           # Send content chunks
           streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "output_text", data: message_text))
           # Send final response
           streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "response", data: parsed))
+        else
+          Rails.logger.warn("No messages found in parsed response")
         end
         
         log_langfuse_generation(
@@ -113,6 +123,7 @@ class Provider::Openai < Provider
         parsed
       else
         messages = chat_config.build_input(prompt)
+        Rails.logger.debug("Non-streaming mode - Built messages: #{messages.inspect}")
 
         parameters = {
           model: model,
@@ -124,8 +135,13 @@ class Provider::Openai < Provider
         parameters[:tool_choice] = "auto" if chat_config.tools.any?
         parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
 
+        Rails.logger.debug("Sending chat request with parameters: #{parameters.except(:messages).inspect}")
         raw_response = client.chat(parameters: parameters)
+        Rails.logger.debug("Raw response received: #{raw_response.inspect}")
+
         parsed = ChatParser.new(raw_response).parsed
+        Rails.logger.debug("Parsed response: #{parsed.inspect}")
+
         log_langfuse_generation(
           name: "chat_response",
           model: model,

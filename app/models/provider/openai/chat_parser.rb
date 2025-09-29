@@ -6,12 +6,17 @@ class Provider::Openai::ChatParser
   end
 
   def parsed
-    ChatResponse.new(
+    Rails.logger.debug("ChatParser parsing object: #{object.inspect}")
+    
+    response = ChatResponse.new(
       id: response_id,
       model: response_model,
       messages: messages,
       function_requests: function_requests
     )
+    
+    Rails.logger.debug("ChatParser created response: #{response.inspect}")
+    response
   end
 
   private
