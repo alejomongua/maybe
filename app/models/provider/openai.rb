@@ -75,28 +75,11 @@ class Provider::Openai < Provider
         function_results: function_results
       )
 
-      collected_chunks = []
-
-      # Proxy that converts raw stream to "LLM Provider concept" stream
-      stream_proxy = if streamer.present?
-        proc do |chunk|
-          parsed_chunk = ChatStreamParser.new(chunk).parsed
-
-          unless parsed_chunk.nil?
-            streamer.call(parsed_chunk)
-            collected_chunks << parsed_chunk
-          end
-        end
-      else
-        nil
-      end
-
       messages = chat_config.build_input(prompt)
 
       parameters = {
         model: model,
-        messages: messages,
-        stream: stream_proxy
+        messages: messages
       }
 
       # Add optional parameters if present
@@ -104,21 +87,46 @@ class Provider::Openai < Provider
       parameters[:tool_choice] = "auto" if chat_config.tools.any?
       parameters[:max_tokens] = 4096 # Set reasonable default for Ollama compatibility
 
-      raw_response = client.chat(parameters: parameters)
-
-      # If streaming, Ruby OpenAI does not return anything, so to normalize this method's API, we search
-      # for the "response chunk" in the stream and return it (it is already parsed)
-      if stream_proxy.present?
-        response_chunk = collected_chunks.find { |chunk| chunk.type == "response" }
-        response = response_chunk.data
-        log_langfuse_generation(
-          name: "chat_response",
-          model: model,
-          input: messages,
-          output: response.messages.map(&:output_text).join("\n")
-        )
-        response
+      # Handle streaming differently for Chat Completions API
+      if streamer.present?
+        collected_content = []
+        
+        stream_proxy = proc do |chunk, _bytesize|
+          # For Chat Completions API streaming, we get content chunks
+          content_delta = chunk.dig("choices", 0, "delta", "content")
+          if content_delta.present?
+            collected_content << content_delta
+            streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "output_text", data: content_delta))
+          end
+          
+          # Check if this is the final chunk
+          if chunk.dig("choices", 0, "finish_reason").present?
+            # Build the final response from collected content
+            full_content = collected_content.join("")
+            response_data = {
+              "id" => "stream-#{Time.now.to_i}",
+              "model" => model,
+              "choices" => [
+                {
+                  "message" => {
+                    "role" => "assistant",
+                    "content" => full_content
+                  }
+                }
+              ]
+            }
+            parsed_response = ChatParser.new(response_data).parsed
+            streamer.call(Provider::LlmConcept::ChatStreamChunk.new(type: "response", data: parsed_response))
+          end
+        end
+        
+        parameters[:stream] = stream_proxy
+        client.chat(parameters: parameters)
+        
+        # For streaming, we return nil since the response is handled through the streamer
+        nil
       else
+        raw_response = client.chat(parameters: parameters)
         parsed = ChatParser.new(raw_response).parsed
         log_langfuse_generation(
           name: "chat_response",
