@@ -1,0 +1,67 @@
+<div class="container mx-auto px-4 py-8">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold">Recurring Transactions</h1>
+    <%= link_to "New Recurring Transaction", new_recurring_transaction_path, class: "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" %>
+  </div>
+
+  <% if @recurring_transactions.any? %>
+    <div class="overflow-x-auto">
+      <table class="min-w-full bg-white border border-gray-300">
+        <thead>
+          <tr class="bg-gray-100">
+            <th class="px-4 py-2 border-b text-left">Name</th>
+            <th class="px-4 py-2 border-b text-left">Account</th>
+            <th class="px-4 py-2 border-b text-left">Kind</th>
+            <th class="px-4 py-2 border-b text-left">Amount</th>
+            <th class="px-4 py-2 border-b text-left">Currency</th>
+            <th class="px-4 py-2 border-b text-left">Day of Month</th>
+            <th class="px-4 py-2 border-b text-left">Interval (Months)</th>
+            <th class="px-4 py-2 border-b text-left">Weekend Strategy</th>
+            <th class="px-4 py-2 border-b text-left">Start On</th>
+            <th class="px-4 py-2 border-b text-left">End On</th>
+            <th class="px-4 py-2 border-b text-left">Next Run</th>
+            <th class="px-4 py-2 border-b text-left">Last Run</th>
+            <th class="px-4 py-2 border-b text-left">Status</th>
+            <th class="px-4 py-2 border-b text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @recurring_transactions.each do |rt| %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2 border-b"><%= rt.name %></td>
+              <td class="px-4 py-2 border-b"><%= rt.account&.name %></td>
+              <td class="px-4 py-2 border-b"><%= rt.kind %></td>
+              <td class="px-4 py-2 border-b"><%= rt.amount %></td>
+              <td class="px-4 py-2 border-b"><%= rt.currency %></td>
+              <td class="px-4 py-2 border-b"><%= rt.day_of_month %></td>
+              <td class="px-4 py-2 border-b"><%= rt.interval_months %></td>
+              <td class="px-4 py-2 border-b"><%= rt.weekend_strategy %></td>
+              <td class="px-4 py-2 border-b"><%= rt.start_on %></td>
+              <td class="px-4 py-2 border-b"><%= rt.end_on %></td>
+              <td class="px-4 py-2 border-b"><%= rt.next_run_on %></td>
+              <td class="px-4 py-2 border-b"><%= rt.last_run_on %></td>
+              <td class="px-4 py-2 border-b">
+                <span class="px-2 py-1 rounded <%= rt.status == 'active' ? 'bg-green-200 text-green-800' : rt.status == 'paused' ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-200 text-gray-800' %>">
+                  <%= rt.status %>
+                </span>
+              </td>
+              <td class="px-4 py-2 border-b">
+                <div class="flex space-x-2">
+                  <%= link_to "Edit", edit_recurring_transaction_path(rt), class: "text-blue-600 hover:text-blue-800" %>
+                  <% if rt.status == "active" %>
+                    <%= button_to "Pause", pause_recurring_transaction_path(rt), method: :post, class: "text-yellow-600 hover:text-yellow-800" %>
+                  <% elsif rt.status == "paused" %>
+                    <%= button_to "Resume", resume_recurring_transaction_path(rt), method: :post, class: "text-green-600 hover:text-green-800" %>
+                  <% end %>
+                  <%= button_to "Delete", recurring_transaction_path(rt), method: :delete, data: { confirm: "Are you sure you want to delete this recurring transaction?" }, class: "text-red-600 hover:text-red-800" %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-gray-600">No recurring transactions yet. Create one to get started!</p>
+  <% end %>
+</div>

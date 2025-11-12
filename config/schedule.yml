@@ -18,3 +18,8 @@ run_security_health_checks:
   class: "SecurityHealthCheckJob"
   queue: "scheduled"
   description: "Runs security health checks to detect issues with security data"
+
+materialize_recurring_transactions:
+  cron: "15 8 * * *"
+  class: "MaterializeRecurringTransactionsJob"
+  queue: "scheduled"
