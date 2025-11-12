@@ -1,17 +1,17 @@
 class CreateRecurringTransactions < ActiveRecord::Migration[7.1]
   def change
-    create_table :recurring_transactions do |t|
-      t.references :family, null: false, foreign_key: true, index: true
-      t.references :account, null: false, foreign_key: true, index: true
-      t.references :counter_account, null: true, foreign_key: { to_table: :accounts }, index: true
+    create_table :recurring_transactions, id: :uuid do |t|
+      t.references :family, null: false, foreign_key: true, index: true, type: :uuid
+      t.references :account, null: false, foreign_key: true, index: true, type: :uuid
+      t.references :counter_account, null: true, foreign_key: { to_table: :accounts }, index: true, type: :uuid
 
       t.integer :kind, null: false, default: 0
       t.string :name, null: false
       t.text :notes
       t.decimal :amount, precision: 19, scale: 4, null: false
       t.string :currency, null: false
-      t.references :category, null: true, foreign_key: true
-      t.references :merchant, null: true, foreign_key: true
+      t.references :category, null: true, foreign_key: true, index: true, type: :uuid
+      t.references :merchant, null: true, foreign_key: true, index: true, type: :uuid
 
       t.integer :day_of_month, null: false
       t.integer :interval_months, null: false, default: 1
@@ -24,15 +24,13 @@ class CreateRecurringTransactions < ActiveRecord::Migration[7.1]
       t.string :timezone, null: false
 
       t.integer :status, null: false, default: 0
-      t.references :created_by, null: true, foreign_key: { to_table: :users }
+      t.references :created_by, null: true, foreign_key: { to_table: :users }, type: :uuid
       t.integer :lock_version, null: false, default: 0
 
       t.timestamps
     end
 
     add_index :recurring_transactions, [:family_id, :status, :next_run_on], name: "index_rt_on_family_status_next_run"
-    add_index :recurring_transactions, :account_id
-    add_index :recurring_transactions, :counter_account_id
     add_index :recurring_transactions, :kind
 
     # Optional partial index for active + scheduled (Postgres)

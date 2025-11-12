@@ -7,7 +7,7 @@ class RecurringTransaction < ApplicationRecord
   belongs_to :created_by, class_name: "User", optional: true
 
   enum kind: { standard: 0, transfer: 1 }
-  enum weekend_strategy: { none: 0, following: 1, preceding: 2, nearest: 3, last_day: 4 }
+  enum weekend_strategy: { no_adjustment: 0, following: 1, preceding: 2, nearest: 3, last_day: 4 }
   enum status: { active: 0, paused: 1, archived: 2 }
 
   validates :family, :account, :name, :amount, :currency, :day_of_month, 
@@ -153,7 +153,7 @@ class RecurringTransaction < ApplicationRecord
   end
 
   def apply_weekend_strategy(date)
-    return date if weekend_strategy == "none"
+    return date if weekend_strategy == "no_adjustment"
     return date.end_of_month if weekend_strategy == "last_day"
     return date if business_day?(date)
 
