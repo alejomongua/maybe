@@ -1,107 +1,108 @@
-<%= form_with model: recurring_transaction, local: true, class: "max-w-2xl" do |f| %>
+<%# locals: (recurring_transaction:) %>
+
+<%= styled_form_with model: recurring_transaction, class: "space-y-6" do |f| %>
+
   <% if recurring_transaction.errors.any? %>
-    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-      <h2 class="font-bold mb-2"><%= pluralize(recurring_transaction.errors.count, "error") %> prohibited this recurring transaction from being saved:</h2>
-      <ul class="list-disc list-inside">
-        <% recurring_transaction.errors.full_messages.each do |message| %>
-          <li><%= message %></li>
-        <% end %>
-      </ul>
-    </div>
+    <%= render "shared/form_errors", model: recurring_transaction %>
   <% end %>
 
-  <div class="mb-4">
-    <%= f.label :account_id, "Account", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :account_id, options_from_collection_for_select(Current.family.accounts, :id, :name, recurring_transaction.account_id), { include_blank: "Select an account" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
+  <section class="space-y-4">
+    <h3 class="text-sm font-medium text-primary">Basic Information</h3>
+    
+    <%= f.text_field :name, label: "Name", required: true, placeholder: "e.g., Monthly Rent, Netflix Subscription" %>
+    
+    <%= f.text_area :notes, label: "Notes", placeholder: "Optional description" %>
+  </section>
 
-  <div class="mb-4">
-    <%= f.label :kind, "Kind", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :kind, options_for_select([["Standard", "standard"], ["Transfer", "transfer"]], recurring_transaction.kind), { include_blank: "Select kind" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
+  <section class="space-y-4">
+    <h3 class="text-sm font-medium text-primary">Transaction Details</h3>
+    
+    <%= f.select :kind, 
+        options_for_select([["Standard Transaction", "standard"], ["Transfer", "transfer"]], recurring_transaction.kind),
+        { label: "Type", required: true, include_blank: "Select type" } %>
+    
+    <%= f.collection_select :account_id, 
+        Current.family.accounts, :id, :name,
+        { label: "Account", required: true, include_blank: "Select an account" } %>
+    
+    <%= f.collection_select :counter_account_id, 
+        Current.family.accounts, :id, :name,
+        { label: "Counter Account", include_blank: "Select counter account (required for transfers)" },
+        { data: { recurring_transactions_target: "counterAccountField" } } %>
+    
+    <%= f.number_field :amount, 
+        label: "Amount", 
+        required: true,
+        step: 0.01,
+        placeholder: "0.00" %>
+    
+    <%= f.text_field :currency, 
+        label: "Currency",
+        required: true,
+        value: recurring_transaction.currency.presence || Current.family.currency,
+        placeholder: "USD" %>
+    
+    <%= f.collection_select :category_id, 
+        Current.family.categories, :id, :name,
+        { label: "Category", include_blank: "Select a category (optional)" } %>
+    
+    <%= f.collection_select :merchant_id, 
+        Current.family.merchants, :id, :name,
+        { label: "Merchant", include_blank: "Select a merchant (optional)" } %>
+  </section>
 
-  <div class="mb-4">
-    <%= f.label :counter_account_id, "Counter Account", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :counter_account_id, options_from_collection_for_select(Current.family.accounts, :id, :name, recurring_transaction.counter_account_id), { include_blank: "Select counter account (required for transfers)" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
+  <section class="space-y-4">
+    <h3 class="text-sm font-medium text-primary">Schedule</h3>
+    
+    <%= f.number_field :day_of_month, 
+        label: "Day of Month",
+        required: true,
+        min: 1,
+        max: 31,
+        placeholder: "1-31" %>
+    
+    <%= f.number_field :interval_months, 
+        label: "Repeat Every (Months)",
+        required: true,
+        min: 1,
+        value: recurring_transaction.interval_months || 1,
+        placeholder: "1 = monthly, 3 = quarterly, 12 = yearly" %>
+    
+    <%= f.select :weekend_strategy,
+        options_for_select([
+          ["No Adjustment", "no_adjustment"],
+          ["Following Business Day", "following"],
+          ["Preceding Business Day", "preceding"],
+          ["Nearest Business Day", "nearest"],
+          ["Last Day of Month", "last_day"]
+        ], recurring_transaction.weekend_strategy),
+        { label: "Weekend Strategy", required: true, include_blank: "Select strategy" } %>
+    
+    <%= f.date_field :start_on, 
+        label: "Start Date",
+        required: true,
+        value: recurring_transaction.start_on || Date.current %>
+    
+    <%= f.date_field :end_on, 
+        label: "End Date (Optional)",
+        placeholder: "Leave blank for indefinite" %>
+    
+    <%= f.time_zone_select :timezone,
+        ActiveSupport::TimeZone.all,
+        { label: "Timezone", required: true, default: recurring_transaction.timezone.presence || Current.family.timezone } %>
+  </section>
 
-  <div class="mb-4">
-    <%= f.label :name, "Name", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.text_field :name, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
+  <section class="space-y-4">
+    <h3 class="text-sm font-medium text-primary">Status</h3>
+    
+    <%= f.select :status,
+        options_for_select([
+          ["Active", "active"],
+          ["Paused", "paused"],
+          ["Archived", "archived"]
+        ], recurring_transaction.status || "active"),
+        { label: "Status", required: true } %>
+  </section>
 
-  <div class="mb-4">
-    <%= f.label :notes, "Notes", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.text_area :notes, rows: 3, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :amount, "Amount", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.number_field :amount, step: 0.0001, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :currency, "Currency", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.text_field :currency, value: recurring_transaction.currency.presence || Current.family.currency, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :category_id, "Category", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :category_id, options_from_collection_for_select(Current.family.categories, :id, :name, recurring_transaction.category_id), { include_blank: "Select a category" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :merchant_id, "Merchant", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :merchant_id, options_from_collection_for_select(Current.family.merchants, :id, :name, recurring_transaction.merchant_id), { include_blank: "Select a merchant" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :day_of_month, "Day of Month (1-31)", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.number_field :day_of_month, min: 1, max: 31, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :interval_months, "Interval (Months)", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.number_field :interval_months, min: 1, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :weekend_strategy, "Weekend Strategy", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :weekend_strategy, options_for_select([
-      ["No Adjustment", "no_adjustment"],
-      ["Following", "following"],
-      ["Preceding", "preceding"],
-      ["Nearest", "nearest"],
-      ["Last Day", "last_day"]
-    ], recurring_transaction.weekend_strategy), { include_blank: "Select weekend strategy" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :start_on, "Start On", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.date_field :start_on, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :end_on, "End On", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.date_field :end_on, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :timezone, "Timezone", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.text_field :timezone, value: recurring_transaction.timezone.presence || Current.family.timezone, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="mb-4">
-    <%= f.label :status, "Status", class: "block text-gray-700 font-bold mb-2" %>
-    <%= f.select :status, options_for_select([
-      ["Active", "active"],
-      ["Paused", "paused"],
-      ["Archived", "archived"]
-    ], recurring_transaction.status), { include_blank: "Select status" }, class: "w-full px-3 py-2 border border-gray-300 rounded" %>
-  </div>
-
-  <div class="flex space-x-4">
-    <%= f.submit "Save Recurring Transaction", class: "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer" %>
-    <%= link_to "Cancel", recurring_transactions_path, class: "bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded" %>
-  </div>
+  <%= f.submit recurring_transaction.new_record? ? "Create Recurring Transaction" : "Update Recurring Transaction" %>
 <% end %>
