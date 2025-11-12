@@ -53,7 +53,6 @@ gem "bcrypt", "~> 3.1"
 gem "jwt"
 gem "jbuilder"
 gem "countries"
-gem "duckdb"
 
 # OAuth & API Security
 gem "doorkeeper"
