@@ -20,8 +20,19 @@ class Provider::Openai < Provider
 
   def initialize(access_token, uri_base: nil, model: nil)
     client_options = { access_token: access_token }
-    client_options[:uri_base] = uri_base if uri_base.present?
     client_options[:request_timeout] = ENV.fetch("OPENAI_REQUEST_TIMEOUT", 60).to_i
+
+    if uri_base.present?
+      client_options[:uri_base] = uri_base
+
+      # ruby-openai builds URLs as: uri_base / api_version / path
+      # e.g. "https://api.z.ai/paas/v4" + "v1" + "/chat/completions"
+      #   → "https://api.z.ai/paas/v4/v1/chat/completions" (wrong – 404)
+      # Fix: if the uri_base already ends with a version segment (vN), pass that
+      # as api_version so the gem detects the overlap and skips adding its own.
+      detected_version = uri_base.match(%r{/(v\d+)/?$})&.captures&.first
+      client_options[:api_version] = detected_version if detected_version.present?
+    end
 
     @client = ::OpenAI::Client.new(**client_options)
     @uri_base = uri_base
