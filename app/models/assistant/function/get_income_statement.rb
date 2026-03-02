@@ -8,14 +8,14 @@ class Assistant::Function::GetIncomeStatement < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this to get income and expense insights by category, for a specific time period
+        Usa esto para obtener un desglose de ingresos y gastos por categoría para un período de tiempo específico.
 
-        This is great for answering questions like:
-        - What is the user's net income for the current month?
-        - What are the user's spending habits?
-        - How much income or spending did the user have over a specific time period?
+        Es ideal para responder preguntas como:
+        - ¿Cuál es el ingreso neto del usuario en el mes actual?
+        - ¿Cuáles son los hábitos de gasto del usuario?
+        - ¿Cuánto ingresó o gastó el usuario en un período de tiempo específico?
 
-        Simple example:
+        Ejemplo simple:
 
         ```
         get_income_statement({

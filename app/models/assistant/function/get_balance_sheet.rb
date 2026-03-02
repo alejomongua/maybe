@@ -8,11 +8,11 @@ class Assistant::Function::GetBalanceSheet < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this to get the user's balance sheet with varying amounts of historical data.
+        Usa esto para obtener el balance patrimonial del usuario con distintos niveles de datos históricos.
 
-        This is great for answering questions like:
-        - What is the user's net worth?  What is it composed of?
-        - How has the user's wealth changed over time?
+        Es ideal para responder preguntas como:
+        - ¿Cuál es el patrimonio neto del usuario? ¿De qué está compuesto?
+        - ¿Cómo ha evolucionado el patrimonio del usuario a lo largo del tiempo?
       INSTRUCTIONS
     end
   end

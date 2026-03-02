@@ -6,31 +6,31 @@ class Assistant::Function::Calculate < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this tool to perform precise arithmetic calculations instead of computing them yourself.
-        Always use this when you need to sum, subtract, multiply, divide, or compute percentages on numbers.
+        Usa esta herramienta para realizar cálculos aritméticos precisos en lugar de calcularlos tú mismo.
+        Úsala SIEMPRE que necesites sumar, restar, multiplicar, dividir o calcular porcentajes sobre números.
 
-        This is especially important when:
-        - Totaling a list of transaction amounts
-        - Computing net income (income minus expenses)
-        - Calculating percentage shares or changes
-        - Any other math where precision is required
+        Es especialmente importante en casos como:
+        - Sumar una lista de importes de transacciones
+        - Calcular el ingreso neto (ingresos menos gastos)
+        - Calcular porcentajes o variaciones
+        - Cualquier operación matemática donde la precisión sea necesaria
 
-        Examples:
+        Ejemplos:
 
-        Sum a list of values:
+        Sumar una lista de valores:
         ```
         calculate({ operation: "sum", operands: [12.50, 8.00, 99.99] })
         ```
 
-        Subtract two values:
+        Restar dos valores:
         ```
         calculate({ operation: "subtract", operands: [500.00, 123.45] })
         ```
 
-        Compute what percentage A is of B:
+        Calcular qué porcentaje es A de B:
         ```
         calculate({ operation: "percentage", operands: [25.00, 200.00] })
-        # returns 12.5 (i.e. 25 is 12.5% of 200)
+        # devuelve 12.5 (es decir, 25 es el 12.5% de 200)
         ```
       INSTRUCTIONS
     end

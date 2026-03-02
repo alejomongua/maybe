@@ -8,17 +8,17 @@ class Assistant::Function::ImportBankStatement < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this to import transactions from a bank statement PDF that has already been uploaded.
+        Usa esto para importar transacciones desde un PDF de extracto bancario que ya haya sido subido.
 
-        This function will:
-        1. Extract transaction data from the PDF using AI
-        2. Create a transaction import with the extracted data
-        3. Return the import ID and extracted transactions for review
+        Esta función realizará:
+        1. Extraer los datos de transacciones del PDF usando IA
+        2. Crear una importación de transacciones con los datos extraídos
+        3. Devolver el ID de importación y las transacciones extraídas para su revisión
 
-        The PDF must have already been uploaded via the PDF import feature.
-        Only use this for PDFs that are identified as bank statements.
+        El PDF debe haberse subido previamente mediante la función de importación de PDF.
+        Úsalo únicamente para PDFs identificados como extractos bancarios.
 
-        Example:
+        Ejemplo:
 
         ```
         import_bank_statement({
@@ -27,7 +27,7 @@ class Assistant::Function::ImportBankStatement < Assistant::Function
         })
         ```
 
-        If account_id is not provided, you should ask the user which account to import to.
+        Si no se proporciona account_id, debes preguntar al usuario en qué cuenta desea importar.
       INSTRUCTIONS
     end
   end

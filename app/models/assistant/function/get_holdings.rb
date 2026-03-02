@@ -14,26 +14,26 @@ class Assistant::Function::GetHoldings < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this to search user's investment holdings by using various optional filters.
+        Usa esto para buscar las posiciones de inversión del usuario aplicando varios filtros opcionales.
 
-        This function is great for things like:
-        - Finding specific holdings or securities
-        - Getting portfolio composition and allocation
-        - Viewing investment performance and cost basis
+        Esta función es ideal para:
+        - Encontrar posiciones o valores específicos
+        - Obtener la composición y asignación del portafolio
+        - Ver el rendimiento de las inversiones y el coste base
 
-        Note: This function only returns holdings from Investment and Crypto accounts.
+        Nota: Esta función solo devuelve posiciones de cuentas de Inversión y Criptomonedas.
 
-        Note on pagination:
+        Nota sobre paginación:
 
-        This function can be paginated. You can expect the following properties in the response:
+        Esta función admite paginación. La respuesta incluirá las siguientes propiedades:
 
-        - `total_pages`: The total number of pages of results
-        - `page`: The current page of results
-        - `page_size`: The number of results per page (this will always be #{default_page_size})
-        - `total_results`: The total number of results for the given filters
-        - `total_value`: The total value of all holdings for the given filters
+        - `total_pages`: Número total de páginas de resultados
+        - `page`: Página actual de resultados
+        - `page_size`: Número de resultados por página (siempre será #{default_page_size})
+        - `total_results`: Número total de resultados para los filtros dados
+        - `total_value`: Valor total de todas las posiciones para los filtros dados
 
-        Simple example (all current holdings):
+        Ejemplo simple (todas las posiciones actuales):
 
         ```
         get_holdings({
@@ -41,12 +41,12 @@ class Assistant::Function::GetHoldings < Assistant::Function
         })
         ```
 
-        More complex example (various filters):
+        Ejemplo más complejo (varios filtros):
 
         ```
         get_holdings({
           page: 1,
-          accounts: ["Brokerage Account"],
+          accounts: ["Cuenta de Inversión"],
           securities: ["AAPL", "GOOGL"]
         })
         ```

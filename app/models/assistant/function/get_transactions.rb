@@ -12,27 +12,27 @@ class Assistant::Function::GetTransactions < Assistant::Function
 
     def description
       <<~INSTRUCTIONS
-        Use this to search user's transactions by using various optional filters.
+        Usa esto para buscar transacciones del usuario aplicando varios filtros opcionales.
 
-        This function is great for things like:
-        - Finding specific transactions
-        - Getting basic stats about a small group of transactions
+        Esta función es ideal para:
+        - Encontrar transacciones específicas
+        - Obtener estadísticas básicas de un grupo pequeño de transacciones
 
-        This function is not great for:
-        - Large time periods (use the get_income_statement function for this)
+        Esta función NO es ideal para:
+        - Periodos de tiempo grandes (usa la función get_income_statement para eso)
 
-        Note on pagination:
+        Nota sobre paginación:
 
-        This function can be paginated.  You can expect the following properties in the response:
+        Esta función admite paginación. La respuesta incluirá las siguientes propiedades:
 
-        - `total_pages`: The total number of pages of results
-        - `page`: The current page of results
-        - `page_size`: The number of results per page (this will always be #{default_page_size})
-        - `total_results`: The total number of results for the given filters
-        - `total_income`: The total income for the given filters
-        - `total_expenses`: The total expenses for the given filters
+        - `total_pages`: Número total de páginas de resultados
+        - `page`: Página actual de resultados
+        - `page_size`: Número de resultados por página (siempre será #{default_page_size})
+        - `total_results`: Número total de resultados para los filtros dados
+        - `total_income`: Total de ingresos para los filtros dados
+        - `total_expenses`: Total de gastos para los filtros dados
 
-        Simple example (transactions from the last 30 days):
+        Ejemplo simple (transacciones de los últimos 30 días):
 
         ```
         get_transactions({
@@ -42,7 +42,7 @@ class Assistant::Function::GetTransactions < Assistant::Function
         })
         ```
 
-        More complex example (various filters):
+        Ejemplo más complejo (varios filtros):
 
         ```
         get_transactions({

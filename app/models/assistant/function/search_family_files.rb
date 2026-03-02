@@ -6,23 +6,23 @@ class Assistant::Function::SearchFamilyFiles < Assistant::Function
 
     def description
       <<~DESC
-        Search through documents that the family has uploaded to their financial document store.
+        Busca en los documentos que el hogar ha subido a su almacén de documentos financieros.
 
-        Use this when the user asks questions about their uploaded financial documents such as
-        tax returns, bank statements, contracts, insurance policies, investment reports, or any
-        other files they've imported.
+        Usa esto cuando el usuario haga preguntas sobre sus documentos financieros subidos, como
+        declaraciones de impuestos, extractos bancarios, contratos, pólizas de seguro, informes de
+        inversión o cualquier otro archivo importado.
 
-        Returns relevant excerpts from matching documents along with the source filename and
-        a relevance score.
+        Devuelve fragmentos relevantes de los documentos coincidentes junto con el nombre del archivo
+        y una puntuación de relevancia.
 
-        Supported file types include: PDF, DOCX, XLSX, PPTX, TXT, CSV, JSON, XML, HTML, MD,
-        and common source code formats.
+        Tipos de archivo admitidos: PDF, DOCX, XLSX, PPTX, TXT, CSV, JSON, XML, HTML, MD
+        y formatos de código fuente comunes.
 
-        Example:
+        Ejemplo:
 
         ```
         search_family_files({
-          query: "What was the total income on my 2024 tax return?"
+          query: "¿Cuál fue el ingreso total en mi declaración de impuestos de 2024?"
         })
         ```
       DESC

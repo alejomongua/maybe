@@ -5,7 +5,7 @@ class Assistant::Function::GetAccounts < Assistant::Function
     end
 
     def description
-      "Use this to see what accounts the user has along with their current and historical balances"
+      "Usa esto para ver qué cuentas tiene el usuario junto con sus saldos actuales e históricos"
     end
   end
 
