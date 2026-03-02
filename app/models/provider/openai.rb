@@ -200,7 +200,7 @@ class Provider::Openai < Provider
     if custom_provider?
       generic_chat_response(
         prompt: prompt,
-        model: model,
+        model: @default_model,
         instructions: instructions,
         functions: functions,
         function_results: function_results,
@@ -349,6 +349,9 @@ class Provider::Openai < Provider
         }
         params[:tools] = tools if tools.present?
 
+        Rails.logger.warn("[AI DEBUG] generic_chat_response request params: #{params.to_json}")
+        Rails.logger.warn("[AI DEBUG] Model used: #{model.inspect} | default_model: #{@default_model.inspect} | ENV OPENAI_MODEL: #{ENV['OPENAI_MODEL'].inspect}")
+
         begin
           raw_response = client.chat(parameters: params)
 
@@ -382,6 +385,10 @@ class Provider::Openai < Provider
 
           parsed
         rescue => e
+          # Extract the actual response body from Faraday errors (contains the provider's error message)
+          response_body = e.respond_to?(:response) && e.response ? e.response[:body] : nil
+          Rails.logger.warn("[AI DEBUG] generic_chat_response failed - #{e.class}: #{e.message}")
+          Rails.logger.warn("[AI DEBUG] Response body: #{response_body}") if response_body.present?
           log_langfuse_generation(
             name: "chat_response",
             model: model,
@@ -468,7 +475,7 @@ class Provider::Openai < Provider
             name: fn[:name],
             description: fn[:description],
             parameters: fn[:params_schema],
-            strict: fn[:strict]
+            # Note: `strict` is omitted — it's OpenAI-specific and rejected by most compatible providers
           }
         }
       end
