@@ -222,6 +222,9 @@ Rails.application.routes.draw do
       # Production API endpoints
       resources :accounts, only: [ :index ]
       resources :transactions, only: [ :index, :show, :create, :update, :destroy ]
+      resources :categories, only: [ :index ]
+      resources :tags, only: [ :index ]
+      resources :merchants, only: [ :index ]
       resource :usage, only: [ :show ], controller: "usage"
 
       resources :chats, only: [ :index, :show, :create, :update, :destroy ] do

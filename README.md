@@ -40,6 +40,41 @@ Join us!
 
 Sure is a fully working personal finance app that can be [self hosted with Docker](docs/hosting/docker.md).
 
+## MCP Integration (AI Assistants)
+
+Sure includes support for **MCP (Model Context Protocol)**, enabling AI assistants like Claude Desktop to interact with your financial data programmatically.
+
+### Quick Start
+
+```bash
+# Install dependencies
+pip install -r mcp_requirements.txt
+
+# Generate API key from Settings → API Key in the web UI
+# Configure environment
+export MAYBE_API_KEY="your_api_key_here"
+export MAYBE_API_BASE_URL="http://localhost:3000/api/v1"  # or your instance URL
+
+# Validate setup
+python test_mcp_setup.py
+```
+
+### Usage with Claude Desktop
+
+Once configured, you can use natural language commands like:
+- "Show me my accounts and balances"
+- "Create a transaction for $50 groceries from my checking account"
+- "How much did I spend on dining out this month?"
+- "List all transactions over $100 from last week"
+
+### Documentation
+
+- **[MCP_README.md](MCP_README.md)** - Installation and configuration guide
+- **[MCP_QUICKSTART.md](MCP_QUICKSTART.md)** - Quick reference with examples
+- **[MCP_ARCHITECTURE.md](MCP_ARCHITECTURE.md)** - Architecture and deployment guide
+
+**Note:** The MCP server runs **outside the container** on your local machine and communicates with the Sure API via HTTP. See the architecture documentation for details.
+
 ## Forking and Attribution
 
 This repo is a community fork of the archived Maybe Finance repo.
@@ -85,6 +120,45 @@ For further instructions, see guides below.
 - [Linux dev setup](https://github.com/we-promise/sure/wiki/Linux-Dev-Setup-Guide)
 - [Windows dev setup](https://github.com/we-promise/sure/wiki/Windows-Dev-Setup-Guide)
 - Dev containers - visit [this guide](https://code.visualstudio.com/docs/devcontainers/containers)
+
+## MCP Integration for AI Assistants
+
+Sure includes an MCP (Model Context Protocol) server that enables AI assistants like Claude Desktop to interact with your financial data programmatically.
+
+### Quick Setup
+
+```bash
+# Install dependencies
+pip install -r mcp_requirements.txt
+
+# Set environment variables
+export MAYBE_API_KEY="your_api_key_here"  # Get from Settings → API Key
+export MAYBE_API_BASE_URL="http://localhost:3000/api/v1"  # Adjust for your instance
+
+# Validate setup
+python test_mcp_setup.py
+
+# Run automated setup
+./setup_mcp.sh
+```
+
+### Usage with Claude Desktop
+
+Once configured, you can use natural language commands:
+
+- "Show me my accounts and balances"
+- "I spent $50 on groceries from my checking account yesterday"
+- "How much did I spend on dining out this month?"
+- "Show transactions over $100 from my credit card"
+
+### Documentation
+
+- **[MCP_README.md](MCP_README.md)** - Full installation and configuration guide
+- **[MCP_QUICKSTART.md](MCP_QUICKSTART.md)** - Quick reference for common commands
+- **[MCP_ARCHITECTURE.md](MCP_ARCHITECTURE.md)** - Deployment architecture and container setup
+- **[docs/mcp_integration.md](docs/mcp_integration.md)** - Integration documentation
+
+**Note:** The MCP server runs outside the container on your local machine and communicates with the Sure API via HTTP. See [MCP_ARCHITECTURE.md](MCP_ARCHITECTURE.md) for details.
 
 ## License and Trademarks
 
