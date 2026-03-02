@@ -1042,27 +1042,35 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_18_120001) do
 
   create_table "recurring_transactions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "family_id", null: false
-    t.uuid "merchant_id"
+    t.uuid "account_id", null: false
+    t.uuid "counter_account_id"
+    t.integer "kind", null: false, default: 0
+    t.string "name", null: false
+    t.text "notes"
     t.decimal "amount", precision: 19, scale: 4, null: false
     t.string "currency", null: false
-    t.integer "expected_day_of_month", null: false
-    t.date "last_occurrence_date", null: false
-    t.date "next_expected_date", null: false
-    t.string "status", default: "active", null: false
-    t.integer "occurrence_count", default: 0, null: false
+    t.uuid "category_id"
+    t.uuid "merchant_id"
+    t.integer "day_of_month", null: false
+    t.integer "interval_months", null: false, default: 1
+    t.integer "weekend_strategy", null: false, default: 0
+    t.date "start_on", null: false
+    t.date "end_on"
+    t.date "next_run_on", null: false
+    t.date "last_run_on"
+    t.string "timezone", null: false
+    t.integer "status", null: false, default: 0
+    t.uuid "created_by_id"
+    t.integer "lock_version", null: false, default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "name"
-    t.boolean "manual", default: false, null: false
-    t.decimal "expected_amount_min", precision: 19, scale: 4
-    t.decimal "expected_amount_max", precision: 19, scale: 4
-    t.decimal "expected_amount_avg", precision: 19, scale: 4
-    t.index ["family_id", "merchant_id", "amount", "currency"], name: "idx_recurring_txns_merchant", unique: true, where: "(merchant_id IS NOT NULL)"
-    t.index ["family_id", "name", "amount", "currency"], name: "idx_recurring_txns_name", unique: true, where: "((name IS NOT NULL) AND (merchant_id IS NULL))"
-    t.index ["family_id", "status"], name: "index_recurring_transactions_on_family_id_and_status"
-    t.index ["family_id"], name: "index_recurring_transactions_on_family_id"
+    t.index ["account_id"], name: "index_recurring_transactions_on_account_id"
+    t.index ["category_id"], name: "index_recurring_transactions_on_category_id"
+    t.index ["counter_account_id"], name: "index_recurring_transactions_on_counter_account_id"
+    t.index ["family_id", "status", "next_run_on"], name: "index_rt_on_family_status_next_run"
+    t.index ["kind"], name: "index_recurring_transactions_on_kind"
     t.index ["merchant_id"], name: "index_recurring_transactions_on_merchant_id"
-    t.index ["next_expected_date"], name: "index_recurring_transactions_on_next_expected_date"
+    t.index ["next_run_on"], name: "index_rt_on_next_run_active", where: "((status = 0) AND (next_run_on IS NOT NULL))"
   end
 
   create_table "rejected_transfers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1546,8 +1554,12 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_18_120001) do
   add_foreign_key "oidc_identities", "users"
   add_foreign_key "plaid_accounts", "plaid_items"
   add_foreign_key "plaid_items", "families"
+  add_foreign_key "recurring_transactions", "accounts"
+  add_foreign_key "recurring_transactions", "accounts", column: "counter_account_id"
+  add_foreign_key "recurring_transactions", "categories"
   add_foreign_key "recurring_transactions", "families"
   add_foreign_key "recurring_transactions", "merchants"
+  add_foreign_key "recurring_transactions", "users", column: "created_by_id"
   add_foreign_key "rejected_transfers", "transactions", column: "inflow_transaction_id"
   add_foreign_key "rejected_transfers", "transactions", column: "outflow_transaction_id"
   add_foreign_key "rule_actions", "rules"
