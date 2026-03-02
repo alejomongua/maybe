@@ -1,11 +1,10 @@
 class Account < ApplicationRecord
-  include AASM, Syncable, Monetizable, Chartable, Linkable, Enrichable, Anchorable, Reconcileable
+  include AASM, Syncable, Monetizable, Chartable, Linkable, Enrichable, Anchorable, Reconcileable, TaxTreatable
 
   validates :name, :balance, :currency, presence: true
 
   belongs_to :family
   belongs_to :import, optional: true
-  belongs_to :simplefin_account, optional: true
 
   has_many :import_mappings, as: :mappable, dependent: :destroy, class_name: "Import::Mapping"
   has_many :entries, dependent: :destroy
@@ -23,12 +22,30 @@ class Account < ApplicationRecord
   scope :assets, -> { where(classification: "asset") }
   scope :liabilities, -> { where(classification: "liability") }
   scope :alphabetically, -> { order(:name) }
-  scope :manual, -> { where(plaid_account_id: nil, simplefin_account_id: nil) }
+  scope :manual, -> {
+    left_joins(:account_providers)
+      .where(account_providers: { id: nil })
+      .where(plaid_account_id: nil, simplefin_account_id: nil)
+  }
 
-  has_one_attached :logo
+  scope :visible_manual, -> {
+    visible.manual
+  }
+
+  scope :listable_manual, -> {
+    manual.where.not(status: :pending_deletion)
+  }
+
+  has_one_attached :logo, dependent: :purge_later
 
   delegated_type :accountable, types: Accountable::TYPES, dependent: :destroy
   delegate :subtype, to: :accountable, allow_nil: true
+
+  # Writer for subtype that delegates to the accountable
+  # This allows forms to set subtype directly on the account
+  def subtype=(value)
+    accountable&.subtype = value
+  end
 
   accepts_nested_attributes_for :accountable, update_only: true
 
@@ -57,9 +74,17 @@ class Account < ApplicationRecord
   end
 
   class << self
-    def create_and_sync(attributes)
+    def human_attribute_name(attribute, options = {})
+      options = { moniker: Current.family&.moniker_label || "Family" }.merge(options)
+      super(attribute, options)
+    end
+
+    def create_and_sync(attributes, skip_initial_sync: false)
       attributes[:accountable_attributes] ||= {} # Ensure accountable is created, even if empty
-      account = new(attributes.merge(cash_balance: attributes[:balance]))
+      # Default cash_balance to balance unless explicitly provided (e.g., Crypto sets it to 0)
+      attrs = attributes.dup
+      attrs[:cash_balance] = attrs[:balance] unless attrs.key?(:cash_balance)
+      account = new(attrs)
       initial_balance = attributes.dig(:accountable_attributes, :initial_balance)&.to_d
 
       transaction do
@@ -70,32 +95,117 @@ class Account < ApplicationRecord
         raise result.error if result.error
       end
 
-      account.sync_later
+      # Skip initial sync for linked accounts - the provider sync will handle balance creation
+      # after the correct currency is known
+      account.sync_later unless skip_initial_sync
       account
     end
 
 
     def create_from_simplefin_account(simplefin_account, account_type, subtype = nil)
+      # Respect user choice when provided; otherwise infer a sensible default
+      # Require an explicit account_type; do not infer on the backend
+      if account_type.blank? || account_type.to_s == "unknown"
+        raise ArgumentError, "account_type is required when creating an account from SimpleFIN"
+      end
+
       # Get the balance from SimpleFin
       balance = simplefin_account.current_balance || simplefin_account.available_balance || 0
 
       # SimpleFin returns negative balances for credit cards (liabilities)
-      # But Maybe expects positive balances for liabilities
+      # But Sure expects positive balances for liabilities
       if account_type == "CreditCard" || account_type == "Loan"
         balance = balance.abs
+      end
+
+      # Calculate cash balance correctly for investment accounts
+      cash_balance = balance
+      if account_type == "Investment"
+        begin
+          calculator = SimplefinAccount::Investments::BalanceCalculator.new(simplefin_account)
+          calculated = calculator.cash_balance
+          cash_balance = calculated unless calculated.nil?
+        rescue => e
+          Rails.logger.warn(
+            "Investment cash_balance calculation failed for " \
+            "SimpleFin account #{simplefin_account.id}: #{e.class} - #{e.message}"
+          )
+          # Fallback to zero as suggested
+          cash_balance = 0
+        end
       end
 
       attributes = {
         family: simplefin_account.simplefin_item.family,
         name: simplefin_account.name,
         balance: balance,
+        cash_balance: cash_balance,
         currency: simplefin_account.currency,
         accountable_type: account_type,
         accountable_attributes: build_simplefin_accountable_attributes(simplefin_account, account_type, subtype),
         simplefin_account_id: simplefin_account.id
       }
 
-      create_and_sync(attributes)
+      # Skip initial sync - provider sync will handle balance creation with correct currency
+      create_and_sync(attributes, skip_initial_sync: true)
+    end
+
+    def create_from_enable_banking_account(enable_banking_account, account_type, subtype = nil)
+      # Get the balance from Enable Banking
+      balance = enable_banking_account.current_balance || 0
+
+      # Enable Banking may return negative balances for liabilities
+      # Sure expects positive balances for liabilities
+      if account_type == "CreditCard" || account_type == "Loan"
+        balance = balance.abs
+      end
+
+      cash_balance = balance
+
+      attributes = {
+        family: enable_banking_account.enable_banking_item.family,
+        name: enable_banking_account.name,
+        balance: balance,
+        cash_balance: cash_balance,
+        currency: enable_banking_account.currency || "EUR"
+      }
+
+      accountable_attributes = {}
+      accountable_attributes[:subtype] = subtype if subtype.present?
+
+      # Skip initial sync - provider sync will handle balance creation with correct currency
+      create_and_sync(
+        attributes.merge(
+          accountable_type: account_type,
+          accountable_attributes: accountable_attributes
+        ),
+        skip_initial_sync: true
+      )
+    end
+
+    def create_from_coinbase_account(coinbase_account)
+      # All Coinbase accounts are crypto exchange accounts
+      family = coinbase_account.coinbase_item.family
+
+      # Extract native balance and currency from Coinbase (e.g., USD, EUR, GBP)
+      native_balance = coinbase_account.raw_payload&.dig("native_balance", "amount").to_d
+      native_currency = coinbase_account.raw_payload&.dig("native_balance", "currency") || family.currency
+
+      attributes = {
+        family: family,
+        name: coinbase_account.name,
+        balance: native_balance,
+        cash_balance: 0, # No cash - all value is in holdings
+        currency: native_currency,
+        accountable_type: "Crypto",
+        accountable_attributes: {
+          subtype: "exchange",
+          tax_treatment: "taxable"
+        }
+      }
+
+      # Skip initial sync - provider sync will handle balance/holdings creation
+      create_and_sync(attributes, skip_initial_sync: true)
     end
 
 
@@ -122,19 +232,16 @@ class Account < ApplicationRecord
       end
   end
 
-  def institution_domain
-    url_string = plaid_account&.plaid_item&.institution_url
-    return nil unless url_string.present?
+  def institution_name
+    read_attribute(:institution_name).presence || provider&.institution_name
+  end
 
-    begin
-      uri = URI.parse(url_string)
-      # Use safe navigation on .host before calling gsub
-      uri.host&.gsub(/^www\./, "")
-    rescue URI::InvalidURIError
-      # Log a warning if the URL is invalid and return nil
-      Rails.logger.warn("Invalid institution URL encountered for account #{id}: #{url_string}")
-      nil
-    end
+  def institution_domain
+    read_attribute(:institution_domain).presence || provider&.institution_domain
+  end
+
+  def logo_url
+    provider&.logo_url
   end
 
   def destroy_later
@@ -153,14 +260,15 @@ class Account < ApplicationRecord
   end
 
   def current_holdings
-    holdings.where(currency: currency)
-            .where.not(qty: 0)
-            .where(
-              id: holdings.select("DISTINCT ON (security_id) id")
-                          .where(currency: currency)
-                          .order(:security_id, date: :desc)
-            )
-            .order(amount: :desc)
+    holdings
+      .where(currency: currency)
+      .where.not(qty: 0)
+      .where(
+        id: holdings.select("DISTINCT ON (security_id) id")
+                    .where(currency: currency)
+                    .order(:security_id, date: :desc)
+      )
+      .order(amount: :desc)
   end
 
   def start_date
@@ -189,6 +297,14 @@ class Account < ApplicationRecord
   # Get long version of the subtype label
   def long_subtype_label
     accountable_class.long_subtype_label_for(subtype) || accountable_class.display_name
+  end
+
+  # Determines if this account supports manual trade entry
+  # Investment accounts always support trades; Crypto only if subtype is "exchange"
+  def supports_trades?
+    return true if investment?
+    return accountable.supports_trades? if crypto? && accountable.respond_to?(:supports_trades?)
+    false
   end
 
   # The balance type determines which "component" of balance is being tracked.

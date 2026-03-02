@@ -17,6 +17,16 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", text: /set up your account/i
   end
 
+
+  test "onboarding setup includes required moniker selection" do
+    get onboarding_url
+    assert_response :success
+
+    assert_select "input[name='user[family_attributes][moniker]'][value='Family'][required]"
+    assert_select "input[name='user[family_attributes][moniker]'][value='Group'][required]"
+    assert_select "p", text: /Will be using Sure with/i
+  end
+
   test "should get preferences" do
     get preferences_onboarding_url
     assert_response :success
@@ -82,7 +92,7 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
   test "should get goals" do
     get goals_onboarding_url
     assert_response :success
-    assert_select "h1", text: /What brings you to Maybe/i
+    assert_select "h1", text: /What brings you here/i
   end
 
   test "should get trial" do

@@ -1,6 +1,14 @@
 module ApplicationHelper
   include Pagy::Frontend
 
+  def product_name
+    Rails.configuration.x.product_name
+  end
+
+  def brand_name
+    Rails.configuration.x.brand_name
+  end
+
   def styled_form_with(**options, &block)
     options[:builder] = StyledFormBuilder
     form_with(**options, &block)
@@ -62,6 +70,23 @@ module ApplicationHelper
     end
   end
 
+
+  def family_moniker
+    Current.family&.moniker_label || "Family"
+  end
+
+  def family_moniker_downcase
+    family_moniker.downcase
+  end
+
+  def family_moniker_plural
+    Current.family&.moniker_label_plural || "Families"
+  end
+
+  def family_moniker_plural_downcase
+    family_moniker_plural.downcase
+  end
+
   def format_money(number_or_money, options = {})
     return nil unless number_or_money
 
@@ -81,6 +106,12 @@ module ApplicationHelper
     end
 
     cookies[:admin] == "true"
+  end
+
+  def default_ai_model
+    # Always return a valid model, never nil or empty
+    # Delegates to Chat.default_model for consistency
+    Chat.default_model
   end
 
   # Renders Markdown text using Redcarpet
@@ -106,6 +137,40 @@ module ApplicationHelper
     )
 
     markdown.render(text).html_safe
+  end
+
+  # Generate the callback URL for Enable Banking OAuth (used in views and controller).
+  # In production, uses the standard Rails route.
+  # In development, uses DEV_WEBHOOKS_URL if set (e.g., ngrok URL).
+  def enable_banking_callback_url
+    return callback_enable_banking_items_url if Rails.env.production?
+
+    ENV.fetch("DEV_WEBHOOKS_URL", root_url).chomp("/") + "/enable_banking_items/callback"
+  end
+
+  # Formats quantity with adaptive precision based on the value size.
+  # Shows more decimal places for small quantities (common with crypto).
+  #
+  # @param qty [Numeric] The quantity to format
+  # @param max_precision [Integer] Maximum precision for very small numbers
+  # @return [String] Formatted quantity with appropriate precision
+  def format_quantity(qty)
+    return "0" if qty.nil? || qty.zero?
+
+    abs_qty = qty.abs
+
+    precision = if abs_qty >= 1
+      1     # "10.5"
+    elsif abs_qty >= 0.01
+      2     # "0.52"
+    elsif abs_qty >= 0.0001
+      4     # "0.0005"
+    else
+      8     # "0.00000052"
+    end
+
+    # Use strip_insignificant_zeros to avoid trailing zeros like "0.50000000"
+    number_with_precision(qty, precision: precision, strip_insignificant_zeros: true)
   end
 
   private

@@ -10,6 +10,23 @@ class RulesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "should get new with pre-filled name and action" do
+    category = categories(:food_and_drink)
+    get new_rule_url(
+      resource_type: "transaction",
+      name: "Starbucks",
+      action_type: "set_transaction_category",
+      action_value: category.id
+    )
+    assert_response :success
+
+    assert_select "input[name='rule[name]'][value='Starbucks']"
+    assert_select "input[name*='[value]'][value='Starbucks']"
+    assert_select "select[name*='[condition_type]'] option[selected][value='transaction_name']"
+    assert_select "select[name*='[action_type]'] option[selected][value='set_transaction_category']"
+    assert_select "select[name*='[value]'] option[selected][value='#{category.id}']"
+  end
+
   test "should get edit" do
     get edit_rule_url(rules(:one))
     assert_response :success
@@ -158,6 +175,49 @@ class RulesControllerTest < ActionDispatch::IntegrationTest
 
     assert_difference [ "Rule.count", "Rule::Condition.count", "Rule::Action.count" ], -1 do
       delete rule_url(rule)
+    end
+
+    assert_redirected_to rules_url
+  end
+
+  test "index renders when rule has empty compound condition" do
+    malformed_rule = @user.family.rules.build(resource_type: "transaction")
+    malformed_rule.conditions.build(condition_type: "compound", operator: "and")
+    malformed_rule.actions.build(action_type: "exclude_transaction")
+    malformed_rule.save!
+
+    get rules_url
+
+    assert_response :success
+    assert_includes response.body, I18n.t("rules.no_condition")
+  end
+
+  test "index uses next valid condition when first compound condition is empty" do
+    rule = @user.family.rules.build(resource_type: "transaction")
+    rule.conditions.build(condition_type: "compound", operator: "and")
+    rule.conditions.build(condition_type: "transaction_name", operator: "like", value: "edge-case-name")
+    rule.actions.build(action_type: "exclude_transaction")
+    rule.save!
+
+    get rules_url
+
+    assert_response :success
+
+    assert_select "##{ActionView::RecordIdentifier.dom_id(rule)}" do
+      assert_select "span", text: /edge-case-name/
+      assert_select "span", text: /#{Regexp.escape(I18n.t("rules.no_condition"))}/, count: 0
+      assert_select "p", text: /and 1 more condition/, count: 0
+    end
+  end
+
+  test "should get confirm_all" do
+    get confirm_all_rules_url
+    assert_response :success
+  end
+
+  test "apply_all enqueues job and redirects" do
+    assert_enqueued_with(job: ApplyAllRulesJob) do
+      post apply_all_rules_url
     end
 
     assert_redirected_to rules_url

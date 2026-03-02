@@ -26,7 +26,7 @@ docker run hello-world
 Open your terminal and create a directory where your app will run. Below is an example command with a recommended directory:
 
 ```bash
-# Create a directory on your computer for Docker files (name whatever you'd like)
+# Create a directory on your computer for Docker files (name it whatever you like)
 mkdir -p ~/docker-apps/sure
 
 # Once created, navigate your current working directory to the new folder
@@ -51,7 +51,8 @@ At this point, the only file in your current working directory should be `compos
 
 ### Step 3 (optional): Configure your environment
 
-By default, our `compose.example.yml` file runs without any configuration.  That said, if you would like extra security (important if you're running outside of a local network), you can follow the steps below to set things up.
+By default, our `compose.example.yml` file runs without any configuration.  
+That said, if you would like extra security (important if you're running outside of a local network), you can follow the steps below to set things up.
 
 If you're running the app locally and don't care much about security, you can skip this step.
 
@@ -59,10 +60,10 @@ If you're running the app locally and don't care much about security, you can sk
 
 In order to configure the app, you will need to create a file called `.env`, which is where Docker will read environment variables from.
 
-To do this, run the following command:
+To do this, you should get our .env.example as a starting point:
 
 ```bash
-touch .env
+curl -o .env https://raw.githubusercontent.com/we-promise/sure/main/.env.example
 ```
 
 #### Generate the app secret key
@@ -92,6 +93,22 @@ Fill in this file with the following variables:
 ```txt
 SECRET_KEY_BASE="replacemewiththegeneratedstringfromthepriorstep"
 POSTGRES_PASSWORD="replacemewithyourdesireddatabasepassword"
+```
+
+#### Using HTTPS
+
+Assuming you want to access your instance from the internet, you should have secured your URL address with an SSL certificate.  
+The Docker instance runs in plain HTTP and you need to tell it that you are redirecting your HTTPS stream to the HTTP one.  
+To do this, edit the `compose.yml` file and find the line stating:  
+
+```yaml
+RAILS_ASSUME_SSL: "false"
+```
+
+and change it to `true`
+
+```yaml
+RAILS_ASSUME_SSL: "true"
 ```
 
 ### Step 4: Run the app
@@ -145,7 +162,7 @@ image: ghcr.io/we-promise/sure:latest
 
 We recommend using one of the following images, but you can pin your app to whatever version you'd like (see [packages](https://github.com/we-promise/sure/pkgs/container/sure)):
 
-- `ghcr.io/we-promise/sure:latest` (latest commit)
+- `ghcr.io/we-promise/sure:latest` (latest `alpha`)
 - `ghcr.io/we-promise/sure:stable` (latest release)
 
 By default, your app _will NOT_ automatically update. To update your self-hosted app, run the following commands in your terminal:
@@ -170,7 +187,7 @@ After doing this, make sure and restart the app:
 ```bash
 docker compose pull # This pulls the "latest" published image from GHCR
 docker compose build # This rebuilds the app with updates
-docker compose up --no-deps -d app # This restarts the app using the newest version
+docker compose up --no-deps -d web worker # This restarts the app using the newest version
 ```
 
 ## Troubleshooting
@@ -189,5 +206,9 @@ By running the commands below, you will delete your existing Sure database and "
 docker compose down
 docker volume rm sure_postgres-data # this is the name of the volume the DB is mounted to
 docker compose up
-docker exec -it sure-postgres-1 psql -U maybe -d maybe_production -c "SELECT 1;" # This will verify that the issue is fixed
+docker compose exec db psql -U sure_user -d sure_development -c "SELECT 1;" # This will verify that the issue is fixed
 ```
+
+### Slow `.csv` import (processing rows taking longer than expected)
+
+Importing comma-separated-value file(s) requires the `sure-worker` container to communicate with Redis. Check your worker logs for any unexpected errors, such as connection timeouts or Redis communication failures.

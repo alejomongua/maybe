@@ -24,7 +24,7 @@ class PlaidAccount::Investments::BalanceCalculator
 
   # Plaid considers "brokerage cash" and "cash equivalent holdings" to all be part of "cash balance"
   #
-  # Internally, we DO NOT.  Maybe clearly distinguishes between "brokerage cash" vs. "holdings (i.e. invested cash)"
+  # Internally, we DO NOT.  Sure clearly distinguishes between "brokerage cash" vs. "holdings (i.e. invested cash)"
   # For this reason, we must manually calculate the cash balance based on "total value" and "holdings value"
   # See PlaidAccount::Investments::SecurityResolver for more details.
   def cash_balance
@@ -44,7 +44,7 @@ class PlaidAccount::Investments::BalanceCalculator
     attr_reader :plaid_account, :security_resolver
 
     def holdings
-      plaid_account.raw_investments_payload["holdings"] || []
+      plaid_account.raw_holdings_payload&.dig("holdings") || []
     end
 
     def calculate_investment_brokerage_cash

@@ -23,3 +23,15 @@ materialize_recurring_transactions:
   cron: "15 8 * * *"
   class: "MaterializeRecurringTransactionsJob"
   queue: "scheduled"
+
+sync_hourly:
+  cron: "0 * * * *" # every hour at the top of the hour
+  class: "SyncHourlyJob"
+  queue: "scheduled"
+  description: "Syncs provider items that opt-in to hourly syncing"
+
+clean_data:
+  cron: "0 3 * * *" # daily at 3:00 AM
+  class: "DataCleanerJob"
+  queue: "scheduled"
+  description: "Cleans up old data (e.g., expired merchant associations)"

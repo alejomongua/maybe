@@ -8,33 +8,37 @@ class Provider::Openai::ChatConfig
     functions.map do |fn|
       {
         type: "function",
-        function: {
-          name: fn[:name],
-          description: fn[:description],
-          parameters: fn[:params_schema],
-          strict: fn[:strict]
-        }
+        name: fn[:name],
+        description: fn[:description],
+        parameters: fn[:params_schema],
+        strict: fn[:strict]
       }
     end
   end
 
   def build_input(prompt)
-    messages = [{ role: "user", content: prompt }]
-    Rails.logger.debug("ChatConfig - Initial message: #{messages.first.inspect}")
+    results = function_results.map do |fn_result|
+      # Handle nil explicitly to avoid serializing to "null"
+      output = fn_result[:output]
+      serialized_output = if output.nil?
+        ""
+      elsif output.is_a?(String)
+        output
+      else
+        output.to_json
+      end
 
-    # Add function results as tool messages for Chat Completions API
-    function_results.each do |fn_result|
-      tool_message = {
-        role: "tool",
-        tool_call_id: fn_result[:call_id],
-        content: fn_result[:output].to_json
+      {
+        type: "function_call_output",
+        call_id: fn_result[:call_id],
+        output: serialized_output
       }
-      messages << tool_message
-      Rails.logger.debug("ChatConfig - Added tool message: #{tool_message.inspect}")
     end
 
-    Rails.logger.debug("ChatConfig - Final messages: #{messages.inspect}")
-    messages
+    [
+      { role: "user", content: prompt },
+      *results
+    ]
   end
 
   private

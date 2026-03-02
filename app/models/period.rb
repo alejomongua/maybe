@@ -34,11 +34,17 @@ class Period
       label: "Current Month",
       comparison_label: "vs. start of month"
     },
+    "last_month" => {
+      date_range: -> { [ 1.month.ago.beginning_of_month.to_date, 1.month.ago.end_of_month.to_date ] },
+      label_short: "LM",
+      label: "Last Month",
+      comparison_label: "vs. last month"
+    },
     "last_30_days" => {
       date_range: -> { [ 30.days.ago.to_date, Date.current ] },
       label_short: "30D",
       label: "Last 30 Days",
-      comparison_label: "vs. last month"
+      comparison_label: "vs. last 30 days"
     },
     "last_90_days" => {
       date_range: -> { [ 90.days.ago.to_date, Date.current ] },
@@ -63,6 +69,28 @@ class Period
       label_short: "5Y",
       label: "Last 5 Years",
       comparison_label: "vs. 5 years ago"
+    },
+    "last_10_years" => {
+      date_range: -> { [ 10.years.ago.to_date, Date.current ] },
+      label_short: "10Y",
+      label: "Last 10 Years",
+      comparison_label: "vs. 10 years ago"
+    },
+    "all_time" => {
+      date_range: -> {
+        oldest_date = Current.family&.oldest_entry_date
+        # If no family or no entries exist, use a reasonable historical fallback
+        # to ensure "All Time" represents a meaningful range, not just today
+        start_date = if oldest_date && oldest_date < Date.current
+          oldest_date
+        else
+          5.years.ago.to_date
+        end
+        [ start_date, Date.current ]
+      },
+      label_short: "All",
+      label: "All Time",
+      comparison_label: "vs. beginning"
     }
   }
 
@@ -87,6 +115,22 @@ class Period
 
     def as_options
       all.map { |period| [ period.label_short, period.key ] }
+    end
+
+    def current_month_for(family)
+      return from_key("current_month") unless family&.uses_custom_month_start?
+
+      family.current_custom_month_period
+    end
+
+    def last_month_for(family)
+      return from_key("last_month") unless family&.uses_custom_month_start?
+
+      current_start = family.custom_month_start_for(Date.current)
+      last_month_date = current_start - 1.day
+      start_date = family.custom_month_start_for(last_month_date)
+      end_date = family.custom_month_end_for(last_month_date)
+      custom(start_date: start_date, end_date: end_date)
     end
   end
 

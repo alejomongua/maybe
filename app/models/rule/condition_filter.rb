@@ -4,9 +4,9 @@ class Rule::ConditionFilter
   TYPES = [ "text", "number", "select" ]
 
   OPERATORS_MAP = {
-    "text" => [ [ "Contains", "like" ], [ "Equal to", "=" ] ],
+    "text" => [ [ "Contains", "like" ], [ "Equal to", "=" ], [ "Is empty", "is_null" ] ],
     "number" => [ [ "Greater than", ">" ], [ "Greater or equal to", ">=" ], [ "Less than", "<" ], [ "Less than or equal to", "<=" ], [ "Is equal to", "=" ] ],
-    "select" => [ [ "Equal to", "=" ] ]
+    "select" => [ [ "Equal to", "=" ], [ "Is empty", "is_null" ] ]
   }
 
   def initialize(rule)
@@ -67,21 +67,44 @@ class Rule::ConditionFilter
     end
 
     def build_sanitized_where_condition(field, operator, value)
-      sanitized_value = operator == "like" ? "%#{ActiveRecord::Base.sanitize_sql_like(value)}%" : value
+      if operator == "is_null"
+        ActiveRecord::Base.sanitize_sql_for_conditions(
+          "#{field} #{sanitize_operator(operator)}"
+        )
+      else
+        normalized_value = normalize_value(value)
+        normalized_field = normalize_field(field)
+        sanitized_value = operator == "like" ? "%#{ActiveRecord::Base.sanitize_sql_like(normalized_value)}%" : normalized_value
 
-      ActiveRecord::Base.sanitize_sql_for_conditions([
-        "#{field} #{sanitize_operator(operator)} ?",
-        sanitized_value
-      ])
+        ActiveRecord::Base.sanitize_sql_for_conditions([
+          "#{normalized_field} #{sanitize_operator(operator)} ?",
+          sanitized_value
+        ])
+      end
     end
 
     def sanitize_operator(operator)
       raise UnsupportedOperatorError, "Unsupported operator: #{operator} for type: #{type}" unless operators.map(&:last).include?(operator)
 
-      if operator == "like"
+      case operator
+      when "like"
         "ILIKE"
+      when "is_null"
+        "IS NULL"
       else
         operator
       end
+    end
+
+    def normalize_value(value)
+      return value unless type == "text"
+
+      value.to_s.gsub(/\s+/, " ").strip
+    end
+
+    def normalize_field(field)
+      return field unless type == "text"
+
+      "BTRIM(REGEXP_REPLACE(#{field}, '[[:space:]]+', ' ', 'g'))"
     end
 end

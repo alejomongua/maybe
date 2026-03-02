@@ -4,6 +4,7 @@ class Rule < ApplicationRecord
   belongs_to :family
   has_many :conditions, dependent: :destroy
   has_many :actions, dependent: :destroy
+  has_many :rule_runs, dependent: :destroy
 
   accepts_nested_attributes_for :conditions, allow_destroy: true
   accepts_nested_attributes_for :actions, allow_destroy: true
@@ -39,9 +40,44 @@ class Rule < ApplicationRecord
     matching_resources_scope.count
   end
 
-  def apply(ignore_attribute_locks: false)
+  # Calculates total unique resources affected across multiple rules
+  # This handles overlapping rules by deduplicating transaction IDs
+  def self.total_affected_resource_count(rules)
+    return 0 if rules.empty?
+
+    # Collect all unique transaction IDs matched by any rule
+    transaction_ids = Set.new
+    rules.each do |rule|
+      transaction_ids.merge(rule.send(:matching_resources_scope).pluck(:id))
+    end
+
+    transaction_ids.size
+  end
+
+  def apply(ignore_attribute_locks: false, rule_run: nil)
+    total_modified = 0
+    total_async_jobs = 0
+    has_async = false
+
     actions.each do |action|
-      action.apply(matching_resources_scope, ignore_attribute_locks: ignore_attribute_locks)
+      result = action.apply(matching_resources_scope, ignore_attribute_locks: ignore_attribute_locks, rule_run: rule_run)
+
+      if result.is_a?(Hash) && result[:async]
+        has_async = true
+        total_async_jobs += result[:jobs_count] || 0
+        total_modified += result[:modified_count] || 0
+      elsif result.is_a?(Integer)
+        total_modified += result
+      else
+        # Log unexpected result type but don't fail
+        Rails.logger.warn("Rule#apply: Unexpected result type from action #{action.id}: #{result.class} (value: #{result.inspect})")
+      end
+    end
+
+    if has_async
+      { modified_count: total_modified, async: true, jobs_count: total_async_jobs }
+    else
+      total_modified
     end
   end
 
@@ -50,14 +86,23 @@ class Rule < ApplicationRecord
   end
 
   def primary_condition_title
-    return "No conditions" if conditions.none?
+    condition = displayed_condition
+    return I18n.t("rules.no_condition") if condition.blank?
 
-    first_condition = conditions.first
-    if first_condition.compound? && first_condition.sub_conditions.any?
-      first_sub_condition = first_condition.sub_conditions.first
-      "If #{first_sub_condition.filter.label.downcase} #{first_sub_condition.operator} #{first_sub_condition.value_display}"
-    else
-      "If #{first_condition.filter.label.downcase} #{first_condition.operator} #{first_condition.value_display}"
+    "If #{condition.filter.label.downcase} #{condition.operator} #{condition.value_display}"
+  end
+
+  def displayed_condition
+    displayable_conditions.first
+  end
+
+  def additional_displayable_conditions_count
+    [ displayable_conditions.size - 1, 0 ].max
+  end
+
+  def displayable_conditions
+    conditions.filter_map do |condition|
+      condition.compound? ? condition.sub_conditions.first : condition
     end
   end
 
@@ -79,6 +124,8 @@ class Rule < ApplicationRecord
     end
 
     def min_actions
+      return if new_record? && !actions.empty?
+
       if actions.reject(&:marked_for_destruction?).empty?
         errors.add(:base, "must have at least one action")
       end

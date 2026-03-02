@@ -1,5 +1,10 @@
 ---
 en:
+  defaults:
+    brand_name: "%{brand_name}"
+    product_name: "%{product_name}"
+  global:
+    expand: "Expand"
   activerecord:
     errors:
       messages:

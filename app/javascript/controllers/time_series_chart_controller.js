@@ -66,6 +66,18 @@ export default class extends Controller {
   }
 
   _draw() {
+    // Guard against invalid dimensions (e.g., when container is collapsed or not yet rendered)
+    const minWidth = 50;
+    const minHeight = 50;
+
+    if (
+      this._d3ContainerWidth < minWidth ||
+      this._d3ContainerHeight < minHeight
+    ) {
+      // Skip rendering if dimensions are invalid
+      return;
+    }
+
     if (this._normalDataPoints.length < 2) {
       this._drawEmpty();
     } else {
@@ -277,7 +289,7 @@ export default class extends Controller {
       .append("div")
       .attr(
         "class",
-        "bg-container text-sm font-sans absolute p-2 border border-secondary rounded-lg pointer-events-none opacity-0",
+        "bg-container text-sm font-sans absolute p-2 border border-secondary rounded-lg pointer-events-none opacity-0 top-0",
       );
   }
 

@@ -43,7 +43,7 @@ class PlaidAccount::Investments::SecurityResolver
     Response = Struct.new(:security, :cash_equivalent?, :brokerage_cash?, keyword_init: true)
 
     def securities
-      plaid_account.raw_investments_payload["securities"] || []
+      plaid_account.raw_holdings_payload&.dig("securities") || []
     end
 
     # Tries to find security, or returns the "proxy security" (common with options contracts that have underlying securities)
@@ -63,7 +63,7 @@ class PlaidAccount::Investments::SecurityResolver
       end
     end
 
-    # Plaid treats "brokerage cash" differently than us.  Internally, Maybe treats "brokerage cash"
+    # Plaid treats "brokerage cash" differently than us.  Internally, Sure treats "brokerage cash"
     # as "uninvested cash" (i.e. cash that doesn't have a corresponding Security and can be withdrawn).
     #
     # Plaid treats everything as a "holding" with a corresponding Security.  For example, "brokerage cash" (USD)

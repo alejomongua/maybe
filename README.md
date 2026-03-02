@@ -1,5 +1,8 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/we-promise/sure)
+[![View performance data on Skylight](https://badges.skylight.io/typical/s6PEZSKwcklL.svg)](https://oss.skylight.io/app/applications/s6PEZSKwcklL)
+[![Dosu](https://raw.githubusercontent.com/dosu-ai/assets/main/dosu-badge.svg)](https://app.dosu.dev/a72bdcfd-15f5-4edc-bd85-ea0daa6c3adc/ask)
 
-<img width="1190" alt="sure_hero" src="https://github.com/user-attachments/assets/959f6e9f-2d8a-4f8c-893e-cd3e6eeb4ff2" />
+<img width="1270" height="1140" alt="sure_shot" src="https://github.com/user-attachments/assets/9c6e03cc-3490-40ab-9a68-52e042c51293" />
 
 <p align="center">
   <!-- Keep these links. Translations will automatically update with the README. -->
@@ -13,13 +16,13 @@
   <a href="https://readme-i18n.com/zh/we-promise/sure">中文</a>
 </p>
 
-# ~Maybe~Sure: The personal finance app for everyone
+# Sure: The personal finance app for everyone
 
 <b>Get
-involved: [Discord](https://discord.gg/36ZGBsxYEK) • [(archived) Website](https://web.archive.org/web/20250715182050/https://maybefinance.com/) • [Issues](https://github.com/we-promise/sure/issues)</b>
+involved: [Discord](https://discord.gg/36ZGBsxYEK) • [Website](https://sure.am) • [Issues](https://github.com/we-promise/sure/issues)</b>
 
 > [!IMPORTANT]
-> This repository is a community fork of the now-abandoned Maybe Finance project. 
+> This repository is a community fork of the now-abandoned Maybe Finance project. <br />
 > Learn more in their [final release](https://github.com/maybe-finance/maybe/releases/tag/v0.6.0) doc.
 
 ## Backstory
@@ -36,7 +39,7 @@ That also didn’t work out — at least not as a sustainable B2C business — s
 
 Join us!
 
-## Hosting ~Maybe~Sure
+## Hosting Sure
 
 Sure is a fully working personal finance app that can be [self hosted with Docker](docs/hosting/docker.md).
 
@@ -50,6 +53,14 @@ To stay compliant and avoid trademark issues:
 - Be sure to include the original [AGPLv3 license](https://github.com/maybe-finance/maybe/blob/main/LICENSE) and clearly state in your README that your fork is based on Maybe Finance but is **not affiliated with or endorsed by** Maybe Finance Inc.
 - "Maybe" is a trademark of Maybe Finance Inc. and therefore, use of it is NOT allowed in forked repositories (or the logo)
 
+## Performance Issues
+
+With data-heavy apps, inevitably, there are performance issues. We've set up a public dashboard showing the problematic requests seen on the demo site, along with the stacktraces to help debug them.
+
+https://www.skylight.io/app/applications/s6PEZSKwcklL/recent/6h/endpoints
+
+Any contributions that help improve performance are very much welcome.
+
 ## Local Development Setup
 
 **If you are trying to _self-host_ the app, [read this guide to get started](docs/hosting/docker.md).**
@@ -60,6 +71,7 @@ The instructions below are for developers to get started with contributing to th
 
 - See `.ruby-version` file for required Ruby version
 - PostgreSQL >9.3 (latest stable version recommended)
+- Redis > 5.4 (latest stable version recommended)
 
 ### Getting Started
 ```sh
@@ -72,10 +84,12 @@ bin/dev
 rake demo_data:default
 ```
 
-Visit http://localhost:3000 to view the app. You can log in with these demo credentials (from the DB seed):
+Visit http://localhost:3000 to view the app.
 
-- Email: `user@sure.local`
-- Password: `password`
+If you loaded the optional demo data, log in with these credentials:
+
+- Email: `user@example.com`
+- Password: `Password1!`
 
 For further instructions, see guides below.
 
@@ -85,6 +99,13 @@ For further instructions, see guides below.
 - [Linux dev setup](https://github.com/we-promise/sure/wiki/Linux-Dev-Setup-Guide)
 - [Windows dev setup](https://github.com/we-promise/sure/wiki/Windows-Dev-Setup-Guide)
 - Dev containers - visit [this guide](https://code.visualstudio.com/docs/devcontainers/containers)
+
+### One-click
+
+[![Run on PikaPods](https://www.pikapods.com/static/run-button.svg)](https://www.pikapods.com/pods?run=sure)
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/T_draF?referralCode=CW_fPQ)
+
 
 ## License and Trademarks
 

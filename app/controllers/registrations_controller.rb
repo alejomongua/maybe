@@ -3,6 +3,7 @@ class RegistrationsController < ApplicationController
 
   layout "auth"
 
+  before_action :ensure_signup_open, if: :self_hosted?
   before_action :set_user, only: :create
   before_action :set_invitation
   before_action :claim_invite_code, only: :create, if: :invite_code_required?
@@ -20,7 +21,7 @@ class RegistrationsController < ApplicationController
     else
       family = Family.new
       @user.family = family
-      @user.role = :admin
+      @user.role = User.role_for_new_family_creator
     end
 
     if @user.save
@@ -78,5 +79,11 @@ class RegistrationsController < ApplicationController
       if @user.errors.present?
         render :new, status: :unprocessable_entity
       end
+    end
+
+    def ensure_signup_open
+      return unless Setting.onboarding_state == "closed"
+
+      redirect_to new_session_path, alert: t("registrations.closed")
     end
 end

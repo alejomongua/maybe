@@ -9,11 +9,16 @@ class Api::V1::MessagesController < Api::V1::BaseController
     @message = @chat.messages.build(
       content: message_params[:content],
       type: "UserMessage",
-      ai_model: message_params[:model] || "gpt-4"
+      ai_model: message_params[:model].presence || Chat.default_model
     )
 
     if @message.save
-      AssistantResponseJob.perform_later(@message)
+      # NOTE: Commenting out duplicate job enqueue to fix mobile app receiving duplicate AI responses
+      # UserMessage model already triggers AssistantResponseJob via after_create_commit callback
+      # in app/models/user_message.rb:10-12, so this manual enqueue causes the job to run twice,
+      # resulting in duplicate AI responses with different content and wasted tokens.
+      # See: https://github.com/dwvwdv/sure (mobile app integration issue)
+      # AssistantResponseJob.perform_later(@message)
       render :show, status: :created
     else
       render json: { error: "Failed to create message", details: @message.errors.full_messages }, status: :unprocessable_entity

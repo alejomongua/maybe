@@ -1,3 +1,5 @@
+require "securerandom"
+
 class Demo::Generator
   # @param seed [Integer, String, nil] Seed value used to initialise the internal PRNG. If nil, the ENV variable DEMO_DATA_SEED will
   #   be honoured and default to a random seed when not present.
@@ -38,7 +40,7 @@ class Demo::Generator
       end
 
       puts "👥 Creating empty family..."
-      create_family_and_users!("Demo Family", "user@sure.local", onboarded: true, subscribed: true)
+      create_family_and_users!("Demo Family", "user@example.com", onboarded: true, subscribed: true)
 
       puts "✅ Empty demo data loaded successfully!"
     end
@@ -53,14 +55,33 @@ class Demo::Generator
       end
 
       puts "👥 Creating new user family..."
-      create_family_and_users!("Demo Family", "user@sure.local", onboarded: false, subscribed: false)
+      create_family_and_users!("Demo Family", "user@example.com", onboarded: false, subscribed: false)
 
       puts "✅ New user demo data loaded successfully!"
     end
   end
 
+  def generate_new_user_data_for!(family, email:)
+    with_timing(__method__, max_seconds: 1000) do
+      family = family.reload
+      admin_user = ensure_admin_user!(family, email)
+
+      puts "📊 Creating sample financial data for #{family.name}..."
+      ActiveRecord::Base.transaction do
+        create_realistic_categories!(family)
+        create_realistic_accounts!(family)
+        create_realistic_transactions!(family)
+        generate_budget_auto_fill!(family)
+      end
+
+      family.sync_later
+
+      puts "✅ Sample data loaded successfully!"
+    end
+  end
+
   # Generate comprehensive realistic demo data with multi-currency
-  def generate_default_data!(skip_clear: false, email: "user@sure.local")
+  def generate_default_data!(skip_clear: false, email: "user@example.com")
     if skip_clear
       puts "⏭️  Skipping data clearing (appending new family)..."
     else
@@ -71,6 +92,9 @@ class Demo::Generator
     with_timing(__method__, max_seconds: 1000) do
       puts "👥 Creating demo family..."
       family = create_family_and_users!("Demo Family", email, onboarded: true, subscribed: true)
+
+      puts "🔑 Creating monitoring API key..."
+      create_monitoring_api_key!(family)
 
       puts "📊 Creating realistic financial data..."
       create_realistic_categories!(family)
@@ -118,6 +142,13 @@ class Demo::Generator
       Demo::DataCleaner.new.destroy_everything!
     end
 
+    def ensure_admin_user!(family, email)
+      user = family.users.find_by(email: email)
+      return user if user&.admin? || user&.super_admin?
+
+      raise ActiveRecord::RecordNotFound, "No admin user with email #{email} found in family ##{family.id}"
+    end
+
     def create_family_and_users!(family_name, email, onboarded:, subscribed:)
       family = Family.create!(
         name: family_name,
@@ -133,24 +164,51 @@ class Demo::Generator
       # Admin user
       family.users.create!(
         email: email,
-        first_name: "Demo (admin)",
-        last_name: "Maybe",
+        first_name: "Jack",
+        last_name: "Bogle",
         role: "admin",
-        password: "password",
+        password: "Password1!",
         onboarded_at: onboarded ? Time.current : nil
       )
 
-      # Member user
+      # Family member user
       family.users.create!(
         email: "partner_#{email}",
-        first_name: "Demo (member)",
-        last_name: "Maybe",
+        first_name: "Eve",
+        last_name: "Bogle",
         role: "member",
-        password: "password",
+        password: "Password1!",
         onboarded_at: onboarded ? Time.current : nil
       )
 
       family
+    end
+
+    def create_monitoring_api_key!(family)
+      admin_user = family.users.find_by(role: "admin")
+      return unless admin_user
+
+      # Find existing key scoped to this admin user by the deterministic display_key value
+      existing_key = admin_user.api_keys.find_by(display_key: ApiKey::DEMO_MONITORING_KEY)
+
+      if existing_key
+        puts "  → Use existing monitoring API key"
+        return existing_key
+      end
+
+      # Revoke any existing user-created web API keys to keep demo access predictable.
+      # (the monitoring key uses the dedicated "monitoring" source and cannot be revoked)
+      admin_user.api_keys.active.visible.where(source: "web").find_each(&:revoke!)
+
+      api_key = admin_user.api_keys.create!(
+        name: "monitoring",
+        key: ApiKey::DEMO_MONITORING_KEY,
+        scopes: [ "read" ],
+        source: "monitoring"
+      )
+
+      puts "  → Created monitoring API key: #{ApiKey::DEMO_MONITORING_KEY}"
+      api_key
     end
 
     def create_realistic_categories!(family)

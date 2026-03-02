@@ -130,18 +130,28 @@ class Balance::ChartSeriesBuilder
                  b.flows_factor
           FROM balances b
           WHERE b.account_id = accounts.id
+            AND b.currency = accounts.currency
             AND b.date <= d.date
           ORDER BY b.date DESC
           LIMIT 1
         ) last_bal ON TRUE
         LEFT JOIN LATERAL (
-          SELECT er.rate
-          FROM exchange_rates er
-          WHERE er.from_currency = accounts.currency
-            AND er.to_currency = :target_currency
-            AND er.date <= d.date
-          ORDER BY er.date DESC
-          LIMIT 1
+          SELECT COALESCE(
+            (SELECT er.rate
+             FROM exchange_rates er
+             WHERE er.from_currency = accounts.currency
+               AND er.to_currency = :target_currency
+               AND er.date <= d.date
+             ORDER BY er.date DESC
+             LIMIT 1),
+            (SELECT er.rate
+             FROM exchange_rates er
+             WHERE er.from_currency = accounts.currency
+               AND er.to_currency = :target_currency
+               AND er.date > d.date
+             ORDER BY er.date ASC
+             LIMIT 1)
+          ) AS rate
         ) er ON TRUE
         WHERE accounts.id = ANY(array[:account_ids]::uuid[])
         GROUP BY d.date

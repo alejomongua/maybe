@@ -27,7 +27,7 @@ module AccountableResource
     @q = params.fetch(:q, {}).permit(:search)
     entries = @account.entries.search(@q).reverse_chronological
 
-    @pagy, @entries = pagy(entries, limit: params[:per_page] || "10")
+    @pagy, @entries = pagy(entries, limit: safe_per_page(10))
   end
 
   def edit
@@ -41,15 +41,14 @@ module AccountableResource
   end
 
   def update
-    # Handle balance update if provided
-    if account_params[:balance].present?
+    # Handle balance update if the value actually changed
+    if account_params[:balance].present? && account_params[:balance].to_d != @account.balance
       result = @account.set_current_balance(account_params[:balance].to_d)
       unless result.success?
         @error_message = result.error_message
         render :edit, status: :unprocessable_entity
         return
       end
-      @account.sync_later
     end
 
     # Update remaining account attributes
@@ -66,8 +65,13 @@ module AccountableResource
 
   private
     def set_link_options
-      @show_us_link = Current.family.can_connect_plaid_us?
-      @show_eu_link = Current.family.can_connect_plaid_eu?
+      account_type_name = accountable_type.name
+
+      # Get all available provider configs dynamically for this account type
+      @provider_configs = Provider::Factory.connection_configs_for_account_type(
+        account_type: account_type_name,
+        family: Current.family
+      )
     end
 
     def accountable_type
@@ -81,6 +85,7 @@ module AccountableResource
     def account_params
       params.require(:account).permit(
         :name, :balance, :subtype, :currency, :accountable_type, :return_to,
+        :institution_name, :institution_domain, :notes,
         accountable_attributes: self.class.permitted_accountable_attributes
       )
     end

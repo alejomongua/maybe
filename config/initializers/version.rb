@@ -1,4 +1,4 @@
-module Maybe
+module Sure
   class << self
     def version
       Semver.new(semver)
@@ -10,11 +10,13 @@ module Maybe
       else
         `git rev-parse HEAD`.chomp
       end
+    rescue Errno::ENOENT
+      nil
     end
 
     private
       def semver
-        "0.6.3"
+        "0.6.9-alpha.1"
       end
   end
 end
