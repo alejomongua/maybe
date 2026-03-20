@@ -31,7 +31,6 @@ class Transfer::Creator
 
       Transaction.new(
         kind: kind,
-        category: (investment_contributions_category if kind == "investment_contribution"),
         entry: source_account.entries.build(
           amount: amount.abs,
           currency: source_account.currency,
@@ -40,10 +39,6 @@ class Transfer::Creator
           user_modified: true, # Protect from provider sync claiming this entry
         )
       )
-    end
-
-    def investment_contributions_category
-      source_account.family.investment_contributions_category
     end
 
     def inflow_transaction
@@ -78,8 +73,6 @@ class Transfer::Creator
         "loan_payment"
       elsif destination_account.liability?
         "cc_payment"
-      elsif destination_is_investment? && !source_is_investment?
-        "investment_contribution"
       else
         "funds_movement"
       end

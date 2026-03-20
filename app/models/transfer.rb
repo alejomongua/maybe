@@ -18,8 +18,6 @@ class Transfer < ApplicationRecord
         "loan_payment"
       elsif account.credit_card?
         "cc_payment"
-      elsif account.investment? || account.crypto?
-        "investment_contribution"
       elsif account.liability?
         "cc_payment"
       else

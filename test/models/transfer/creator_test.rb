@@ -7,11 +7,9 @@ class Transfer::CreatorTest < ActiveSupport::TestCase
     @destination_account = accounts(:investment)
     @date = Date.current
     @amount = 100
-    # Ensure the Investment Contributions category exists for transfer tests
-    @investment_category = ensure_investment_contributions_category(@family)
   end
 
-  test "creates investment contribution when transferring from depository to investment" do
+  test "creates funds_movement transfer when transferring from depository to investment" do
     creator = Transfer::Creator.new(
       family: @family,
       source_account_id: @source_account.id,
@@ -25,14 +23,14 @@ class Transfer::CreatorTest < ActiveSupport::TestCase
     assert transfer.persisted?
     assert_equal "confirmed", transfer.status
 
-    # Verify outflow transaction is marked as investment_contribution
+    # Verify outflow transaction is marked as funds_movement (not investment_contribution)
     outflow = transfer.outflow_transaction
-    assert_equal "investment_contribution", outflow.kind
-    assert outflow.transfer?, "investment_contribution should be recognized as a transfer"
+    assert_equal "funds_movement", outflow.kind
+    assert outflow.transfer?, "funds_movement should be recognized as a transfer"
     assert_equal @amount, outflow.entry.amount
     assert_equal @source_account.currency, outflow.entry.currency
     assert_equal "Transfer to #{@destination_account.name}", outflow.entry.name
-    assert_equal @investment_category, outflow.category, "Should auto-assign Investment Contributions category"
+    assert_nil outflow.category, "Should NOT auto-assign category for investment transfers"
 
     # Verify inflow transaction (always funds_movement)
     inflow = transfer.inflow_transaction
@@ -71,7 +69,7 @@ class Transfer::CreatorTest < ActiveSupport::TestCase
     assert_equal "funds_movement", inflow.kind
   end
 
-  test "creates investment contribution when transferring from depository to crypto" do
+  test "creates funds_movement transfer when transferring from depository to crypto" do
     crypto_account = accounts(:crypto)
 
     creator = Transfer::Creator.new(
@@ -86,11 +84,11 @@ class Transfer::CreatorTest < ActiveSupport::TestCase
 
     assert transfer.persisted?
 
-    # Verify outflow transaction is investment_contribution (not funds_movement)
+    # Verify outflow transaction is funds_movement (not investment_contribution)
     outflow = transfer.outflow_transaction
-    assert_equal "investment_contribution", outflow.kind
+    assert_equal "funds_movement", outflow.kind
     assert_equal "Transfer to #{crypto_account.name}", outflow.entry.name
-    assert_equal @investment_category, outflow.category
+    assert_nil outflow.category, "Should NOT auto-assign category for crypto transfers"
 
     # Verify inflow transaction with currency handling
     inflow = transfer.inflow_transaction
@@ -115,7 +113,7 @@ class Transfer::CreatorTest < ActiveSupport::TestCase
 
     assert transfer.persisted?
 
-    # Verify outflow is funds_movement (NOT investment_contribution for rollovers)
+    # Verify outflow is funds_movement
     outflow = transfer.outflow_transaction
     assert_equal "funds_movement", outflow.kind
     assert_nil outflow.category, "Should NOT auto-assign category for investment→investment transfers"
