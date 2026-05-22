@@ -17,9 +17,11 @@ class PendingDuplicateMergesController < ApplicationController
   end
 
   def create
+    return unless require_account_permission!(@transaction.entry.account, :annotate, redirect_path: transactions_path)
+
     # Manually merge the pending transaction with the selected posted transaction
     unless merge_params[:posted_entry_id].present?
-      redirect_back_or_to transactions_path, alert: "Please select a posted transaction to merge with"
+      redirect_back_or_to transactions_path, alert: t(".no_posted_selected")
       return
     end
 
@@ -27,7 +29,7 @@ class PendingDuplicateMergesController < ApplicationController
     posted_entry = find_eligible_posted_entry(merge_params[:posted_entry_id])
 
     unless posted_entry
-      redirect_back_or_to transactions_path, alert: "Invalid transaction selected for merge"
+      redirect_back_or_to transactions_path, alert: t(".invalid_transaction")
       return
     end
 
@@ -46,19 +48,23 @@ class PendingDuplicateMergesController < ApplicationController
 
     # Immediately merge
     if @transaction.merge_with_duplicate!
-      redirect_back_or_to transactions_path, notice: "Pending transaction merged with posted transaction"
+      redirect_back_or_to transactions_path, notice: t(".merge_success")
     else
-      redirect_back_or_to transactions_path, alert: "Could not merge transactions"
+      redirect_back_or_to transactions_path, alert: t(".merge_failed")
     end
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed,
+         ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout => e
+    Rails.logger.error("Failed to manually merge pending transaction: #{e.message}")
+    redirect_back_or_to transactions_path, alert: t("transactions.merge_duplicate.failure")
   end
 
   private
     def set_transaction
-      entry = Current.family.entries.find(params[:transaction_id])
+      entry = Current.accessible_entries.find(params[:transaction_id])
       @transaction = entry.entryable
 
       unless @transaction.is_a?(Transaction) && @transaction.pending?
-        redirect_to transactions_path, alert: "This feature is only available for pending transactions"
+        redirect_to transactions_path, alert: t("pending_duplicate_merges.set_transaction.pending_only")
       end
     end
 

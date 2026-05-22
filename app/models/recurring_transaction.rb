@@ -1,205 +1,407 @@
 class RecurringTransaction < ApplicationRecord
+  include Monetizable
+
   belongs_to :family
-  belongs_to :account
-  belongs_to :counter_account, class_name: "Account", optional: true
-  belongs_to :category, optional: true
+  belongs_to :account, optional: true
+  belongs_to :destination_account, optional: true, class_name: "Account"
   belongs_to :merchant, optional: true
-  belongs_to :created_by, class_name: "User", optional: true
 
-  enum kind: { standard: 0, transfer: 1 }
-  enum weekend_strategy: { no_adjustment: 0, following: 1, preceding: 2, nearest: 3, last_day: 4 }
-  enum status: { active: 0, paused: 1, archived: 2 }
+  monetize :amount
+  monetize :expected_amount_min, allow_nil: true
+  monetize :expected_amount_max, allow_nil: true
+  monetize :expected_amount_avg, allow_nil: true
 
-  validates :family, :account, :name, :amount, :currency, :day_of_month, 
-            :interval_months, :start_on, :timezone, :status, :kind, :next_run_on, presence: true
+  enum :status, { active: "active", inactive: "inactive" }
 
-  validates :amount, numericality: { other_than: 0 }
-  validates :interval_months, numericality: { greater_than_or_equal_to: 1 }
-  validates :day_of_month, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 31 }
+  validates :amount, presence: true
+  validates :currency, presence: true
+  validates :expected_day_of_month, presence: true, numericality: { greater_than: 0, less_than_or_equal_to: 31 }
+  validates :status, presence: true, inclusion: { in: statuses.keys }
+  validates :occurrence_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validate :merchant_or_name_present
+  validate :amount_variance_consistency
+  validate :transfer_endpoints_consistent
 
-  validates :timezone, inclusion: { in: ActiveSupport::TimeZone.all.map(&:name) }
+  def merchant_or_name_present
+    if merchant_id.blank? && name.blank?
+      errors.add(:base, :merchant_or_name_required)
+    end
+  end
 
-  validate :currency_valid
-  validate :date_range_valid
-  validate :transfer_configuration_valid
-  validate :same_family_integrity
+  def amount_variance_consistency
+    return unless manual?
 
-  before_validation :set_defaults
+    if expected_amount_min.present? && expected_amount_max.present?
+      if expected_amount_min > expected_amount_max
+        errors.add(:expected_amount_min, "cannot be greater than expected_amount_max")
+      end
+    end
+  end
 
-  # Scheduling helpers
-  def next_scheduled_date(from_date:)
-    target_month = from_date.advance(months: interval_months)
-    
-    # Handle last_day strategy
-    if weekend_strategy == "last_day"
-      return target_month.end_of_month
+  # When this row represents a recurring transfer, both endpoints must be
+  # present, belong to the same family, and not be the same account.
+  def transfer_endpoints_consistent
+    return if destination_account_id.blank?
+
+    if account_id.blank?
+      errors.add(:account, "must be present on a recurring transfer")
+    elsif account.blank?
+      # account_id references a row that was destroyed. Mirror the
+      # destination_account.blank? branch so the source side surfaces a
+      # normal validation error too.
+      errors.add(:account, "must exist")
+    elsif destination_account.blank?
+      # destination_account_id references a row that was destroyed (or never
+      # existed). Surface as a normal validation error instead of letting
+      # the FK fire on save.
+      errors.add(:destination_account, "must exist")
+    elsif account_id == destination_account_id
+      errors.add(:destination_account, "cannot be the same as the source account")
+    elsif account.family_id != destination_account.family_id
+      errors.add(:destination_account, "must belong to the same family as the source account")
+    end
+  end
+
+  def transfer?
+    destination_account_id.present?
+  end
+
+  scope :for_family, ->(family) { where(family: family) }
+  scope :expected_soon, -> { active.where("next_expected_date <= ?", 1.month.from_now) }
+  scope :accessible_by, ->(user) {
+    accessible_account_ids = Account.accessible_by(user).select(:id)
+    # A recurring row is accessible when:
+    #   * its account_id is in the user's accessible set or null (legacy rows
+    #     with no account scoping survive), AND
+    #   * its destination_account_id is also accessible OR null (so a recurring
+    #     transfer never leaks into the list of a user without access to BOTH
+    #     endpoints).
+    where(account_id: accessible_account_ids)
+      .or(where(account_id: nil))
+      .merge(
+        where(destination_account_id: accessible_account_ids)
+          .or(where(destination_account_id: nil))
+      )
+  }
+
+  # Class methods for identification and cleanup
+  # Schedules pattern identification with debounce to run after all syncs complete
+  def self.identify_patterns_for(family)
+    IdentifyRecurringTransactionsJob.schedule_for(family)
+    0 # Return immediately, actual count will be determined by the job
+  end
+
+  # Synchronous pattern identification (for manual triggers from UI)
+  def self.identify_patterns_for!(family)
+    Identifier.new(family).identify_recurring_patterns
+  end
+
+  def self.cleanup_stale_for(family)
+    Cleaner.new(family).cleanup_stale_transactions
+  end
+
+  # Create a manual recurring transfer from an existing Transfer pair.
+  # Mirrors `create_from_transaction` but populates source + destination
+  # accounts and skips merchant / variance lookup -- transfers are
+  # account-pair-shaped, not merchant-shaped.
+  def self.create_from_transfer(transfer)
+    outflow_entry = transfer.outflow_transaction&.entry
+    inflow_entry  = transfer.inflow_transaction&.entry
+
+    raise ArgumentError, "transfer is missing one of its entries" unless outflow_entry && inflow_entry
+
+    source_account      = outflow_entry.account
+    destination_account = inflow_entry.account
+    family              = source_account.family
+
+    expected_day = outflow_entry.date.day
+    next_expected = calculate_next_expected_date_from_today(expected_day)
+
+    create!(
+      family: family,
+      account: source_account,
+      destination_account: destination_account,
+      merchant_id: nil,
+      # Transfer#name yields "Payment to ..." for liability destinations
+      # and "Transfer to ..." otherwise, matching Transfer::Creator's
+      # name_prefix logic so the recurring row reads consistently with
+      # the originating Transfer.
+      name: transfer.name,
+      amount: outflow_entry.amount, # positive (outflow), per Sure sign convention
+      currency: outflow_entry.currency,
+      expected_day_of_month: expected_day,
+      last_occurrence_date: outflow_entry.date,
+      next_expected_date: next_expected,
+      status: "active",
+      occurrence_count: 1,
+      manual: true
+    )
+  end
+
+  # Create a manual recurring transaction from an existing transaction
+  # Automatically calculates amount variance from past 6 months of matching transactions
+  def self.create_from_transaction(transaction, date_variance: 2)
+    entry = transaction.entry
+    family = entry.account.family
+    expected_day = entry.date.day
+
+    # Find matching transactions from the past 6 months
+    matching_amounts = find_matching_transaction_amounts(
+      family: family,
+      merchant_id: transaction.merchant_id,
+      name: transaction.merchant_id.present? ? nil : entry.name,
+      currency: entry.currency,
+      expected_day: expected_day,
+      lookback_months: 6,
+      account: entry.account
+    )
+
+    # Calculate amount variance from historical data
+    expected_min = expected_max = expected_avg = nil
+    if matching_amounts.size > 1
+      # Multiple transactions found - calculate variance
+      expected_min = matching_amounts.min
+      expected_max = matching_amounts.max
+      expected_avg = matching_amounts.sum / matching_amounts.size
+    elsif matching_amounts.size == 1
+      # Single transaction - no variance yet
+      amount = matching_amounts.first
+      expected_min = amount
+      expected_max = amount
+      expected_avg = amount
     end
 
-    # Clamp day to valid range for target month
-    candidate = clamp_to_month(target_month, day_of_month)
-    
-    # Apply weekend strategy
-    apply_weekend_strategy(candidate)
+    # Calculate next expected date relative to today, not the transaction date
+    next_expected = calculate_next_expected_date_from_today(expected_day)
+
+    create!(
+      family: family,
+      account: entry.account,
+      merchant_id: transaction.merchant_id,
+      name: transaction.merchant_id.present? ? nil : entry.name,
+      amount: entry.amount,
+      currency: entry.currency,
+      expected_day_of_month: expected_day,
+      last_occurrence_date: entry.date,
+      next_expected_date: next_expected,
+      status: "active",
+      occurrence_count: matching_amounts.size,
+      manual: true,
+      expected_amount_min: expected_min,
+      expected_amount_max: expected_max,
+      expected_amount_avg: expected_avg
+    )
   end
 
-  def advance_next_run!(persist: true)
-    self.last_run_on = next_run_on
-    self.next_run_on = next_scheduled_date(from_date: last_run_on + 1.day)
-    save! if persist
+  # Find matching transaction entries for variance calculation
+  def self.find_matching_transaction_entries(family:, merchant_id:, name:, currency:, expected_day:, lookback_months: 6, account: nil)
+    lookback_date = lookback_months.months.ago.to_date
+
+    entries = (account.present? ? account.entries : family.entries)
+      .where(entryable_type: "Transaction")
+      .where(currency: currency)
+      .where("entries.date >= ?", lookback_date)
+      .where("EXTRACT(DAY FROM entries.date) BETWEEN ? AND ?",
+             [ expected_day - 2, 1 ].max,
+             [ expected_day + 2, 31 ].min)
+      .order(date: :desc)
+
+    # Filter by merchant or name
+    if merchant_id.present?
+      # Join with transactions table to filter by merchant_id in SQL (avoids N+1)
+      entries
+        .joins("INNER JOIN transactions ON transactions.id = entries.entryable_id")
+        .where(transactions: { merchant_id: merchant_id })
+        .to_a
+    else
+      entries.where(name: name).to_a
+    end
   end
 
-  def due_on?(date = local_today)
-    status == "active" && 
-      next_run_on.present? && 
-      next_run_on <= date && 
-      (end_on.nil? || date <= end_on)
+  # Find matching transaction amounts for variance calculation
+  def self.find_matching_transaction_amounts(family:, merchant_id:, name:, currency:, expected_day:, lookback_months: 6, account: nil)
+    matching_entries = find_matching_transaction_entries(
+      family: family,
+      merchant_id: merchant_id,
+      name: name,
+      currency: currency,
+      expected_day: expected_day,
+      lookback_months: lookback_months,
+      account: account
+    )
+
+    matching_entries.map(&:amount)
   end
 
-  def overdue?
-    status == "active" && next_run_on.present? && next_run_on < local_today
+  # Calculate next expected date from today
+  def self.calculate_next_expected_date_from_today(expected_day)
+    today = Date.current
+
+    # Try this month first
+    begin
+      this_month_date = Date.new(today.year, today.month, expected_day)
+      return this_month_date if this_month_date > today
+    rescue ArgumentError
+      # Day doesn't exist in this month (e.g., 31st in February)
+    end
+
+    # Otherwise use next month
+    calculate_next_expected_date_for(today, expected_day)
   end
 
-  def build_external_id(run_date)
-    "rt:#{id}:#{run_date.strftime('%Y%m%d')}"
+  def self.calculate_next_expected_date_for(from_date, expected_day)
+    next_month = from_date.next_month
+    begin
+      Date.new(next_month.year, next_month.month, expected_day)
+    rescue ArgumentError
+      next_month.end_of_month
+    end
   end
 
-  def to_entry_attributes(run_date)
-    {
-      entry: {
-        account_id: account_id,
-        name: name,
-        date: run_date,
-        amount: amount,
-        currency: currency,
-        notes: notes
-      },
-      transaction: {
-        category_id: category_id,
-        merchant_id: merchant_id,
-        external_id: build_external_id(run_date)
-      }
-    }
+  # Find matching transactions for this recurring pattern
+  def matching_transactions
+    # For manual recurring with amount variance, match within range
+    # For automatic recurring, match exact amount
+    base = account.present? ? account.entries : family.entries
+
+    entries = if manual? && has_amount_variance?
+      base
+        .where(entryable_type: "Transaction")
+        .where(currency: currency)
+        .where("entries.amount BETWEEN ? AND ?", expected_amount_min, expected_amount_max)
+        .where("EXTRACT(DAY FROM entries.date) BETWEEN ? AND ?",
+               [ expected_day_of_month - 2, 1 ].max,
+               [ expected_day_of_month + 2, 31 ].min)
+        .order(date: :desc)
+    else
+      base
+        .where(entryable_type: "Transaction")
+        .where(currency: currency)
+        .where("entries.amount = ?", amount)
+        .where("EXTRACT(DAY FROM entries.date) BETWEEN ? AND ?",
+               [ expected_day_of_month - 2, 1 ].max,
+               [ expected_day_of_month + 2, 31 ].min)
+        .order(date: :desc)
+    end
+
+    # Filter by merchant or name
+    if merchant_id.present?
+      # Match by merchant through the entryable (Transaction)
+      entries.select do |entry|
+        entry.entryable.is_a?(Transaction) && entry.entryable.merchant_id == merchant_id
+      end
+    else
+      # Match by entry name
+      entries.where(name: name)
+    end
+  end
+
+  # Check if this recurring transaction has amount variance configured
+  def has_amount_variance?
+    expected_amount_min.present? && expected_amount_max.present?
+  end
+
+  # Check if this recurring transaction should be marked inactive
+  def should_be_inactive?
+    return false if last_occurrence_date.nil?
+    # Manual recurring transactions have a longer threshold
+    threshold = manual? ? 6.months.ago : 2.months.ago
+    last_occurrence_date < threshold
+  end
+
+  # Mark as inactive
+  def mark_inactive!
+    update!(status: "inactive")
+  end
+
+  # Mark as active
+  def mark_active!
+    update!(status: "active")
+  end
+
+  # Update based on a new transaction occurrence
+  def record_occurrence!(transaction_date, transaction_amount = nil)
+    self.last_occurrence_date = transaction_date
+    self.next_expected_date = calculate_next_expected_date(transaction_date)
+
+    # Update amount variance for manual recurring transactions BEFORE incrementing count
+    if manual? && transaction_amount.present?
+      update_amount_variance(transaction_amount)
+    end
+
+    self.occurrence_count += 1
+    self.status = "active"
+    save!
+  end
+
+  # Update amount variance tracking based on a new transaction
+  def update_amount_variance(transaction_amount)
+    # First sample - initialize everything
+    if expected_amount_avg.nil?
+      self.expected_amount_min = transaction_amount
+      self.expected_amount_max = transaction_amount
+      self.expected_amount_avg = transaction_amount
+      return
+    end
+
+    # Update min/max
+    self.expected_amount_min = [ expected_amount_min, transaction_amount ].min if expected_amount_min.present?
+    self.expected_amount_max = [ expected_amount_max, transaction_amount ].max if expected_amount_max.present?
+
+    # Calculate new average using incremental formula
+    # For n samples with average A_n, adding sample x_{n+1} gives:
+    # A_{n+1} = A_n + (x_{n+1} - A_n)/(n+1)
+    # occurrence_count includes the initial occurrence, so subtract 1 to get variance samples recorded
+    n = occurrence_count - 1  # Number of variance samples recorded so far
+    self.expected_amount_avg = expected_amount_avg + ((transaction_amount - expected_amount_avg) / (n + 1))
+  end
+
+  # Calculate the next expected date based on the last occurrence
+  def calculate_next_expected_date(from_date = last_occurrence_date)
+    # Start with next month
+    next_month = from_date.next_month
+
+    # Try to use the expected day of month
+    begin
+      Date.new(next_month.year, next_month.month, expected_day_of_month)
+    rescue ArgumentError
+      # If day doesn't exist in month (e.g., 31st in February), use last day of month
+      next_month.end_of_month
+    end
+  end
+
+  # Get the projected transaction for display
+  def projected_entry
+    return nil unless active?
+    return nil unless next_expected_date.future?
+
+    # Use average amount for manual recurring with variance, otherwise use fixed amount
+    display_amount = if manual? && expected_amount_avg.present?
+      expected_amount_avg
+    else
+      amount
+    end
+
+    OpenStruct.new(
+      date: next_expected_date,
+      amount: display_amount,
+      currency: currency,
+      merchant: merchant,
+      name: merchant.present? ? merchant.name : name,
+      recurring: true,
+      projected: true,
+      amount_min: expected_amount_min,
+      amount_max: expected_amount_max,
+      amount_avg: expected_amount_avg,
+      has_variance: has_amount_variance?,
+      transfer: transfer?,
+      source_account: account,
+      destination_account: destination_account
+    )
   end
 
   private
-
-  def set_defaults
-    self.timezone ||= family&.timezone
-    self.currency ||= account&.currency
-    self.next_run_on ||= compute_initial_next_run if start_on.present?
-  end
-
-  def compute_initial_next_run
-    next_scheduled_date(from_date: start_on)
-  end
-
-  def currency_valid
-    return if currency.blank?
-    
-    # Try Money::Currency validation if available
-    begin
-      Money::Currency.new(currency) if defined?(Money::Currency)
-    rescue Money::Currency::UnknownCurrency
-      errors.add(:currency, "is not a valid currency code")
-      return
-    rescue => e
-      # Fallback to simple length check if Money validation fails
-      unless currency.length.between?(3, 10)
-        errors.add(:currency, "must be between 3 and 10 characters")
-      end
+    def monetizable_currency
+      currency
     end
-  end
-
-  def date_range_valid
-    return unless start_on.present? && end_on.present?
-    
-    if end_on < start_on
-      errors.add(:end_on, "must be on or after start date")
-    end
-  end
-
-  def transfer_configuration_valid
-    return unless transfer?
-
-    if counter_account_id.blank?
-      errors.add(:counter_account, "is required for transfers")
-    end
-
-    if account_id == counter_account_id
-      errors.add(:counter_account, "must be different from account")
-    end
-  end
-
-  def same_family_integrity
-    if account && account.family_id != family_id
-      errors.add(:account, "must belong to same family")
-    end
-
-    if counter_account && counter_account.family_id != family_id
-      errors.add(:counter_account, "must belong to same family")
-    end
-
-    if category && category.respond_to?(:family_id) && category.family_id != family_id
-      errors.add(:category, "must belong to same family")
-    end
-
-    if merchant && merchant.respond_to?(:family_id) && merchant.family_id != family_id
-      errors.add(:merchant, "must belong to same family")
-    end
-  end
-
-  def local_today
-    Time.current.in_time_zone(timezone).to_date
-  end
-
-  def apply_weekend_strategy(date)
-    return date if weekend_strategy == "no_adjustment"
-    return date.end_of_month if weekend_strategy == "last_day"
-    return date if business_day?(date)
-
-    case weekend_strategy
-    when "following"
-      following_business_day(date)
-    when "preceding"
-      preceding_business_day(date)
-    when "nearest"
-      # Choose the closer business day, preferring the one in the same month
-      following = following_business_day(date)
-      preceding = preceding_business_day(date)
-      
-      # If one falls outside the month, prefer the one that stays in month
-      if following.month != date.month && preceding.month == date.month
-        preceding
-      elsif preceding.month != date.month && following.month == date.month
-        following
-      else
-        # Both in same month or both outside - choose nearest
-        date.saturday? ? preceding : following
-      end
-    else
-      date
-    end
-  end
-
-  def business_day?(date)
-    !date.saturday? && !date.sunday?
-  end
-
-  def following_business_day(date)
-    candidate = date
-    candidate += 1.day until business_day?(candidate)
-    candidate
-  end
-
-  def preceding_business_day(date)
-    candidate = date
-    candidate -= 1.day until business_day?(candidate)
-    candidate
-  end
-
-  def clamp_to_month(date, day)
-    last_day = date.end_of_month.day
-    actual_day = [day, last_day].min
-    date.change(day: actual_day)
-  end
 end

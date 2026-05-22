@@ -1,60 +1,77 @@
 class RecurringTransactionsController < ApplicationController
-  before_action :set_recurring_transaction, only: [:edit, :update, :destroy, :pause, :resume]
+  layout "settings"
 
   def index
-    @recurring_transactions = Current.family.recurring_transactions.order(:next_run_on, :id)
+    @recurring_transactions = Current.family.recurring_transactions
+                                    .accessible_by(Current.user)
+                                    .includes(:merchant)
+                                    .order(status: :asc, next_expected_date: :asc)
+    @family = Current.family
   end
 
-  def new
-    @recurring_transaction = Current.family.recurring_transactions.new
-  end
+  def update_settings
+    Current.family.update!(recurring_settings_params)
 
-  def create
-    @recurring_transaction = Current.family.recurring_transactions.new(rt_params.merge(created_by: Current.user))
-    if @recurring_transaction.save
-      redirect_to recurring_transactions_path, notice: "Recurring transaction created successfully."
-    else
-      render :new, status: :unprocessable_entity
+    respond_to do |format|
+      format.html do
+        flash[:notice] = t("recurring_transactions.settings_updated")
+        redirect_to recurring_transactions_path
+      end
     end
   end
 
-  def edit
+  def identify
+    count = RecurringTransaction.identify_patterns_for!(Current.family)
+
+    respond_to do |format|
+      format.html do
+        flash[:notice] = t("recurring_transactions.identified", count: count)
+        redirect_to recurring_transactions_path
+      end
+    end
   end
 
-  def update
-    if @recurring_transaction.update(rt_params)
-      redirect_to recurring_transactions_path, notice: "Recurring transaction updated successfully."
+  def cleanup
+    count = RecurringTransaction.cleanup_stale_for(Current.family)
+
+    respond_to do |format|
+      format.html do
+        flash[:notice] = t("recurring_transactions.cleaned_up", count: count)
+        redirect_to recurring_transactions_path
+      end
+    end
+  end
+
+  def toggle_status
+    @recurring_transaction = Current.family.recurring_transactions.accessible_by(Current.user).find(params[:id])
+
+    if @recurring_transaction.active?
+      @recurring_transaction.mark_inactive!
+      message = t("recurring_transactions.marked_inactive")
     else
-      render :edit, status: :unprocessable_entity
+      @recurring_transaction.mark_active!
+      message = t("recurring_transactions.marked_active")
+    end
+
+    respond_to do |format|
+      format.html do
+        flash[:notice] = message
+        redirect_to recurring_transactions_path
+      end
     end
   end
 
   def destroy
-    @recurring_transaction.destroy
-    redirect_to recurring_transactions_path, notice: "Recurring transaction deleted successfully."
-  end
+    @recurring_transaction = Current.family.recurring_transactions.accessible_by(Current.user).find(params[:id])
+    @recurring_transaction.destroy!
 
-  def pause
-    @recurring_transaction.paused!
-    redirect_to recurring_transactions_path, notice: "Recurring transaction paused."
-  end
-
-  def resume
-    @recurring_transaction.active!
-    redirect_to recurring_transactions_path, notice: "Recurring transaction resumed."
+    flash[:notice] = t("recurring_transactions.deleted")
+    redirect_to recurring_transactions_path
   end
 
   private
 
-  def set_recurring_transaction
-    @recurring_transaction = Current.family.recurring_transactions.find(params[:id])
-  end
-
-  def rt_params
-    params.require(:recurring_transaction).permit(
-      :account_id, :counter_account_id, :kind, :name, :notes, :amount, :currency,
-      :category_id, :merchant_id, :day_of_month, :interval_months, :weekend_strategy,
-      :start_on, :end_on, :timezone, :status
-    )
-  end
+    def recurring_settings_params
+      { recurring_transactions_disabled: params[:recurring_transactions_disabled] == "true" }
+    end
 end

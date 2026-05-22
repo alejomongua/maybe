@@ -19,11 +19,6 @@ run_security_health_checks:
   queue: "scheduled"
   description: "Runs security health checks to detect issues with security data"
 
-materialize_recurring_transactions:
-  cron: "15 8 * * *"
-  class: "MaterializeRecurringTransactionsJob"
-  queue: "scheduled"
-
 sync_hourly:
   cron: "0 * * * *" # every hour at the top of the hour
   class: "SyncHourlyJob"
@@ -35,6 +30,12 @@ clean_data:
   class: "DataCleanerJob"
   queue: "scheduled"
   description: "Cleans up old data (e.g., expired merchant associations, expired archived exports)"
+
+clean_debug_log_entries:
+  cron: "30 3 * * *" # daily at 3:30 AM
+  class: "DebugLogCleanupJob"
+  queue: "scheduled"
+  description: "Deletes debug log entries older than 90 days"
 
 clean_inactive_families:
   cron: "0 4 * * *" # daily at 4:00 AM
